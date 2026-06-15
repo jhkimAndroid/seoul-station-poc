@@ -1,4 +1,4 @@
-package com.example.seoulstationpoc.ui.theme
+package com.hubilon.seoulstationpoc.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

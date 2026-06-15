@@ -1,12 +1,21 @@
+import java.util.Properties
+import java.text.SimpleDateFormat
+import java.util.Date
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
 
+val localProps = Properties().also { props ->
+    rootProject.file("local.properties").takeIf { it.exists() }
+        ?.inputStream()?.use { props.load(it) }
+}
+
 android {
-    namespace = "com.example.seoulstationpoc"
+    namespace = "com.hubilon.seoulstationpoc"
     compileSdk {
-        version = release(36)
+        version = release(37)
     }
 
     defaultConfig {
@@ -17,6 +26,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "KAKAO_MAP_KEY", "\"${localProps.getProperty("kakao.native.appkey", "")}\"")
     }
 
     buildTypes {
@@ -34,6 +44,21 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        val buildType = variant.buildType ?: "debug"
+        val date = SimpleDateFormat("yyyyMMdd_HHmm").format(Date())
+
+        variant.outputs.forEach { output ->
+            // 여기에 outputFileName 설정 로직
+            if (output is com.android.build.api.variant.impl.VariantOutputImpl) {
+                output.outputFileName.set("SSP_${buildType}_${date}.apk")
+            }
+        }
     }
 }
 
@@ -49,6 +74,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.kakao.map)
+    implementation(libs.okhttp)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

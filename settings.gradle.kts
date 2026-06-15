@@ -16,8 +16,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://devrepo.kakao.com/nexus/repository/kakaomap-releases/") }
     }
 }
 
-rootProject.name = "SeoulStationPoc"
+rootProject.name = "SeoulStation Poc"
 include(":app")

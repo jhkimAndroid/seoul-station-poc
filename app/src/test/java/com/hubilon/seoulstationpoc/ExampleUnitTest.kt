@@ -1,4 +1,4 @@
-package com.example.seoulstationpoc
+package com.hubilon.seoulstationpoc
 
 import org.junit.Test
 
