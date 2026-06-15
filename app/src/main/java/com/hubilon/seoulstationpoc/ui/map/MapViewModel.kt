@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.hubilon.seoulstationpoc.data.api.LocationApiClient
 import com.hubilon.seoulstationpoc.data.ble.BleScanner
 import com.hubilon.seoulstationpoc.data.fingerprint.FingerprintBuilder
+import com.hubilon.seoulstationpoc.data.location.FusedLocationProvider
+import com.hubilon.seoulstationpoc.data.pdr.PdrProcessor
 import com.hubilon.seoulstationpoc.data.fingerprint.FingerprintEntry
 import com.hubilon.seoulstationpoc.data.fingerprint.MISSING_RSSI
 import com.hubilon.seoulstationpoc.data.sensor.SensorCollector
@@ -25,6 +27,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -43,10 +46,12 @@ sealed class ApLoadState {
 data class MapUiState(
     val scanData: ScanData = ScanData(),
     val isAutoScanning: Boolean = false,
-    val isTracking: Boolean = true,
+    val isTracking: Boolean = false,
     val scanIntervalMs: Long = 1_000L,
     val location: LocationResult? = null,
     val locationUpdateCount: Int = 0,
+    val fusedLocation: LocationResult? = null,
+    val pdrLocation: LocationResult? = null,
     val errorMessage: String? = null,
     val selectedFloor: FloorSelection = FloorSelection.HIDDEN,
     val fingerprintEntries: List<FingerprintEntry>? = null,
@@ -55,11 +60,13 @@ data class MapUiState(
 
 class MapViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val wifiScanner     = WifiScanner(application.applicationContext)
-    private val bleScanner      = BleScanner(application.applicationContext)
-    private val sensorCollector = SensorCollector(application.applicationContext)
-    private val apiClient       = LocationApiClient()
-    private val scanLogger      = ScanLogger(application.applicationContext)
+    private val wifiScanner           = WifiScanner(application.applicationContext)
+    private val bleScanner            = BleScanner(application.applicationContext)
+    private val sensorCollector       = SensorCollector(application.applicationContext)
+    private val fusedLocationProvider = FusedLocationProvider(application.applicationContext)
+    private val pdrProcessor          = PdrProcessor(application.applicationContext)
+    private val apiClient             = LocationApiClient()
+    private val scanLogger           = ScanLogger(application.applicationContext)
 
     private val _uiState = MutableStateFlow(MapUiState())
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
@@ -123,6 +130,26 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     withContext(Dispatchers.IO) { bleScanner.startScan() }
                     sensorCollector.start()
+                    fusedLocationProvider.start(intervalMs)
+                    pdrProcessor.start()
+
+                    // 퓨즈드 위치 업데이트를 자식 코루틴으로 수집
+                    launch {
+                        fusedLocationProvider.locationFlow
+                            .filterNotNull()
+                            .collect { loc ->
+                                _uiState.update { it.copy(fusedLocation = loc) }
+                            }
+                    }
+
+                    // PDR 위치 업데이트를 자식 코루틴으로 수집
+                    launch {
+                        pdrProcessor.pdrFlow
+                            .filterNotNull()
+                            .collect { loc ->
+                                _uiState.update { it.copy(pdrLocation = loc) }
+                            }
+                    }
 
                     while (isActive) {
                         delay(intervalMs)
@@ -139,9 +166,9 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                         val bleList    = bleAccumulator.values.toList()
                         val wifiList   = wifiAccumulator.values.toList()
                         val sensorSnap = sensorCollector.getSnapshot()
-                        Log.d(TAG, "자동측위 #$cycleCount — BLE누적=${bleList.size}(+${newBle.size}), WiFi누적=${wifiList.size}(+${newWifi.size}), sensor=OK")
+                        Log.d(TAG, "자동측위 #$cycleCount — BLE누적=${bleList.size}(+${newBle.size}), WiFi누적=${wifiList.size}(+${newWifi.size}), sensor=${sensorSnap}")
 
-                        if (bleList.isEmpty() && wifiList.isEmpty()) {
+                        if (bleList.isEmpty() && wifiList.isEmpty() && FingerprintBuilder.sensorIdentifiers.isEmpty()) {
                             Log.d(TAG, "자동측위 #$cycleCount — 누적 데이터 없음, 전송 생략")
                             continue
                         }
@@ -172,6 +199,9 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                                 val sensorValues = FingerprintBuilder.toSensorArray(sensorSnap)
                                 val location = apiClient.predict(FingerprintBuilder.toIntArray(entries), sensorValues)
                                 Log.i(TAG, "자동측위 #$cycleCount 위치 수신 — lat=${location.lat}, lng=${location.lng}")
+                                if (!pdrProcessor.hasAnchor) {
+                                    pdrProcessor.setAnchor(location.lat, location.lng)
+                                }
                                 _uiState.update { it.copy(location = location, locationUpdateCount = it.locationUpdateCount + 1) }
                             } catch (e: CancellationException) {
                                 // 새 요청으로 교체됐을 때 — 정상 흐름
@@ -184,9 +214,11 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                     withContext(NonCancellable) {
                         withContext(Dispatchers.IO) { bleScanner.stopScan() }
                         sensorCollector.stop()
+                        fusedLocationProvider.stop()
+                        pdrProcessor.stop()
                     }
                     Log.i(TAG, "자동측위 종료")
-                    _uiState.update { it.copy(isAutoScanning = false) }
+                    _uiState.update { it.copy(isAutoScanning = false, location = null, fusedLocation = null, pdrLocation = null) }
                 }
             }
         }
