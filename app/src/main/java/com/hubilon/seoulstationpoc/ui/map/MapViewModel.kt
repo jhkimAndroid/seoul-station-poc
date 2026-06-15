@@ -169,7 +169,8 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                         }
                         pendingApiJob = launch {
                             try {
-                                val location = apiClient.predict(FingerprintBuilder.toIntArray(entries), sensorSnap)
+                                val sensorValues = FingerprintBuilder.toSensorArray(sensorSnap)
+                                val location = apiClient.predict(FingerprintBuilder.toIntArray(entries), sensorValues)
                                 Log.i(TAG, "자동측위 #$cycleCount 위치 수신 — lat=${location.lat}, lng=${location.lng}")
                                 _uiState.update { it.copy(location = location, locationUpdateCount = it.locationUpdateCount + 1) }
                             } catch (e: CancellationException) {

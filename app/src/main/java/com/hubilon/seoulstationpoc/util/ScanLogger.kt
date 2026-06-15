@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import com.hubilon.seoulstationpoc.data.fingerprint.FingerprintBuilder
 import com.hubilon.seoulstationpoc.data.fingerprint.FingerprintEntry
 import com.hubilon.seoulstationpoc.data.fingerprint.MISSING_RSSI
 import com.hubilon.seoulstationpoc.domain.model.BleSignal
@@ -94,17 +95,9 @@ class ScanLogger(context: Context) {
         }
         if (sensor != null) {
             val fmt = "%.4f"
-            listOf(
-                "accX"  to fmt.format(sensor.accelX),
-                "accY"  to fmt.format(sensor.accelY),
-                "accZ"  to fmt.format(sensor.accelZ),
-                "gyroX" to fmt.format(sensor.gyroX),
-                "gyroY" to fmt.format(sensor.gyroY),
-                "gyroZ" to fmt.format(sensor.gyroZ),
-                "magX"  to fmt.format(sensor.magX),
-                "magY"  to fmt.format(sensor.magY),
-                "magZ"  to fmt.format(sensor.magZ),
-            ).forEach { (name, value) ->
+            val sensorValues = FingerprintBuilder.toSensorArray(sensor)
+            FingerprintBuilder.sensorIdentifiers.forEachIndexed { i, name ->
+                val value = fmt.format(sensorValues.getOrElse(i) { 0f })
                 writeLine(predictStream, (++predictRowCount).toString(), ts, "SENSOR", name, "", value, "")
             }
         }

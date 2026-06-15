@@ -3,6 +3,7 @@ package com.hubilon.seoulstationpoc.data.fingerprint
 import android.util.Log
 import com.hubilon.seoulstationpoc.data.api.ApEntry
 import com.hubilon.seoulstationpoc.domain.model.ScanData
+import com.hubilon.seoulstationpoc.domain.model.SensorSignal
 
 private const val TAG = "FingerprintBuilder"
 const val MISSING_RSSI = -110
@@ -102,27 +103,53 @@ private var WIFI_MACS = arrayOf(
 
 object FingerprintBuilder {
 
+    // fetchAps 성공 전 기본값: acc/gyro/mag 각 3축 = 9개
+    private var SENSOR_IDENTIFIERS: List<String> = listOf(
+        "acc_wx", "acc_wy", "acc_wz",
+        "gyro_wx", "gyro_wy", "gyro_wz",
+        "mag_wx",  "mag_wy",  "mag_wz",
+    )
+
+    /** ScanLogger 등 외부에서 현재 센서 식별자 목록을 읽을 때 사용 */
+    val sensorIdentifiers: List<String> get() = SENSOR_IDENTIFIERS
+
     /**
-     * /api/v1/model/aps 응답으로 BLE_MACS / WIFI_MACS를 교체한다.
-     * feature_idx 오름차순 정렬 → BLE 먼저, WiFi 이후 순서를 유지한다.
+     * /api/v1/model/aps 응답으로 BLE_MACS / WIFI_MACS / SENSOR_IDENTIFIERS를 교체한다.
+     * feature_idx 오름차순 정렬 → BLE 먼저, WiFi 이후, 센서 마지막 순서를 유지한다.
      * identifier는 소문자로 정규화한다 (BLE 응답이 대문자로 올 수 있음).
      */
     fun updateFromAps(aps: List<ApEntry>) {
-        Log.i(TAG, "=== AP 목록 갱신 전 ===")
-        Log.i(TAG, "  BLE  : ${BLE_MACS.size}개")
-        BLE_MACS.forEachIndexed { i, mac -> Log.d(TAG, "  BLE[$i] $mac") }
-        Log.i(TAG, "  WiFi : ${WIFI_MACS.size}개")
-        WIFI_MACS.forEachIndexed { i, mac -> Log.d(TAG, "  WiFi[$i] $mac") }
-
         val sorted = aps.sortedBy { it.featureIdx }
-        BLE_MACS  = sorted.filter { it.type == "ble"  }.map { it.identifier.lowercase() }.toTypedArray()
-        WIFI_MACS = sorted.filter { it.type == "wifi" }.map { it.identifier.lowercase() }.toTypedArray()
+        BLE_MACS           = sorted.filter { it.type == "ble"  }.map { it.identifier.lowercase() }.toTypedArray()
+        WIFI_MACS          = sorted.filter { it.type == "wifi" }.map { it.identifier.lowercase() }.toTypedArray()
+        SENSOR_IDENTIFIERS = sorted.filter { it.type != "ble" && it.type != "wifi" }.map { it.identifier.lowercase() }
 
-        Log.i(TAG, "=== AP 목록 갱신 후 ===")
-        Log.i(TAG, "  BLE  : ${BLE_MACS.size}개")
-        BLE_MACS.forEachIndexed { i, mac -> Log.d(TAG, "  BLE[$i] $mac") }
-        Log.i(TAG, "  WiFi : ${WIFI_MACS.size}개")
-        WIFI_MACS.forEachIndexed { i, mac -> Log.d(TAG, "  WiFi[$i] $mac") }
+        Log.i(TAG, "AP 목록 갱신 — BLE=${BLE_MACS.size} WiFi=${WIFI_MACS.size} Sensor=${SENSOR_IDENTIFIERS.size}${
+            if (SENSOR_IDENTIFIERS.isNotEmpty()) " [${SENSOR_IDENTIFIERS.joinToString()}]" else ""
+        }")
+    }
+
+    /**
+     * fetchAps 의 센서 식별자 순서에 맞춰 FloatArray를 반환한다.
+     * 알 수 없는 식별자는 0f로 채운다.
+     */
+    fun toSensorArray(signal: SensorSignal?): FloatArray {
+        if (SENSOR_IDENTIFIERS.isEmpty()) return FloatArray(0)
+        val s = signal ?: return FloatArray(SENSOR_IDENTIFIERS.size)
+        return FloatArray(SENSOR_IDENTIFIERS.size) { i ->
+            when (SENSOR_IDENTIFIERS[i]) {
+                "acc_wx"  -> s.accelX
+                "acc_wy"  -> s.accelY
+                "acc_wz"  -> s.accelZ
+                "gyro_wx" -> s.gyroX
+                "gyro_wy" -> s.gyroY
+                "gyro_wz" -> s.gyroZ
+                "mag_wx"  -> s.magX
+                "mag_wy"  -> s.magY
+                "mag_wz"  -> s.magZ
+                else      -> { Log.w(TAG, "알 수 없는 센서 식별자: ${SENSOR_IDENTIFIERS[i]}"); 0f }
+            }
+        }
     }
 
     /**
