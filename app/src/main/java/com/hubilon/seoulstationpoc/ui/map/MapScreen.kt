@@ -14,12 +14,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -27,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -76,11 +81,34 @@ fun MapScreen(
     val context = LocalContext.current
     val activity = context as Activity
 
-    // 뒤로가기: BLE/WiFi 스캔 정리 후 태스크 제거 + 프로세스 종료
+    var showExitDialog by remember { mutableStateOf(false) }
+
+    // 뒤로가기: 팝업이 열려 있으면 닫고, 아니면 자동측위 중단 후 종료 팝업 표시
     BackHandler {
-        viewModel.shutDown()
-        activity.finishAndRemoveTask()
-        android.os.Process.killProcess(android.os.Process.myPid())
+        if (showExitDialog) {
+            showExitDialog = false
+        } else {
+            if (uiState.isAutoScanning) viewModel.toggleAutoScan()
+            showExitDialog = true
+        }
+    }
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("앱 종료") },
+            text  = { Text("종료하시겠습니까?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.shutDown()
+                    activity.finishAndRemoveTask()
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                }) { Text("종료") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitDialog = false }) { Text("취소") }
+            }
+        )
     }
 
     val f2Bitmap = remember {
@@ -195,6 +223,12 @@ fun MapScreen(
                 contentDescription = "자동스캔",
                 onClick = { viewModel.toggleAutoScan() },
                 isActive = uiState.isAutoScanning
+            )
+            MapLabeledIconButton(
+                icon = Icons.Default.Refresh,
+                label = "PDR",
+                contentDescription = "PDR 초기화",
+                onClick = { viewModel.resetPdr() }
             )
         }
 
@@ -383,6 +417,54 @@ private fun MapIconButton(
                     tint = iconTint
                 )
             }
+        }
+    }
+}
+
+// 아이콘 + 텍스트 라벨이 세로로 조합된 버튼
+@Composable
+private fun MapLabeledIconButton(
+    icon: ImageVector,
+    label: String,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    val bgColor = if (enabled)
+        MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+    else
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+    val contentColor = if (enabled)
+        MaterialTheme.colorScheme.onSurface
+    else
+        MaterialTheme.colorScheme.onSurfaceVariant
+
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = bgColor,
+        shadowElevation = 4.dp,
+        modifier = modifier
+            .width(44.dp)
+            .height(54.dp)
+            .clickable(enabled = enabled, onClick = onClick)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(20.dp),
+                tint = contentColor
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = contentColor
+            )
         }
     }
 }

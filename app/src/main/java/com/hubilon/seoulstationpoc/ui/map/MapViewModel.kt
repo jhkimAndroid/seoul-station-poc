@@ -103,6 +103,17 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(isTracking = newValue) }
     }
 
+    fun resetPdr() {
+        pdrProcessor.reset()
+        _uiState.update { state ->
+            state.copy(
+                pdrServerLocation = state.location?.let { pdrProcessor.applyPdr(it.lat, it.lng) },
+                pdrFusedLocation  = state.fusedLocation?.let { pdrProcessor.applyPdr(it.lat, it.lng) }
+            )
+        }
+        Log.i(TAG, "PDR 초기화")
+    }
+
     fun setScanInterval(ms: Long) {
         if (_uiState.value.isAutoScanning) return
         Log.i(TAG, "수집주기 변경: ${ms}ms")
