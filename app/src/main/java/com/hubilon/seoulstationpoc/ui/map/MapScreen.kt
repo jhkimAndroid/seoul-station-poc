@@ -99,8 +99,9 @@ fun MapScreen(
 
     val isTracking = uiState.isTracking
     val location = uiState.location
+    val pdrServerLocation = uiState.pdrServerLocation
     val fusedLocation = uiState.fusedLocation
-    val pdrLocation = uiState.pdrLocation
+    val pdrFusedLocation = uiState.pdrFusedLocation
     val locationUpdateCount = uiState.locationUpdateCount
 
     // 네이티브 마커 홀더 (맵 인스턴스가 바뀌면 참조 무효화)
@@ -159,8 +160,9 @@ fun MapScreen(
                 view.updateMap(kakaoMap)
                 view.updateBitmap(floorBitmap)
                 view.updateLocation(location?.let { LatLng.from(it.lat, it.lng) })
+                view.updatePdrServerLocation(pdrServerLocation?.let { LatLng.from(it.lat, it.lng) })
                 view.updateFusedLocation(fusedLocation?.let { LatLng.from(it.lat, it.lng) })
-                view.updatePdrLocation(pdrLocation?.let { LatLng.from(it.lat, it.lng) })
+                view.updatePdrFusedLocation(pdrFusedLocation?.let { LatLng.from(it.lat, it.lng) })
             }
         )
 
@@ -221,7 +223,9 @@ fun MapScreen(
         val fingerprintEntries = uiState.fingerprintEntries
         val matchCount = fingerprintEntries?.count { it.rssi != MISSING_RSSI } ?: 0
         val hasBottom = uiState.isAutoScanning &&
-                (fingerprintEntries != null || errorMessage != null || location != null || fusedLocation != null || pdrLocation != null)
+                (fingerprintEntries != null || errorMessage != null ||
+                 location != null || pdrServerLocation != null ||
+                 fusedLocation != null || pdrFusedLocation != null)
 
         if (hasBottom) {
             Surface(
@@ -263,18 +267,25 @@ fun MapScreen(
                                 color = Color(0xFFE93228)
                             )
                         }
+                        if (pdrServerLocation != null) {
+                            Text(
+                                text = "● 서버+PDR: %.6f, %.6f".format(pdrServerLocation.lat, pdrServerLocation.lng),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFF57C00)
+                            )
+                        }
                         if (fusedLocation != null) {
                             Text(
-                                text = "● 퓨즈드: %.6f, %.6f".format(fusedLocation.lat, fusedLocation.lng),
+                                text = "● GPS: %.6f, %.6f".format(fusedLocation.lat, fusedLocation.lng),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFF388E3C)
                             )
                         }
-                        if (pdrLocation != null) {
+                        if (pdrFusedLocation != null) {
                             Text(
-                                text = "● PDR: %.6f, %.6f".format(pdrLocation.lat, pdrLocation.lng),
+                                text = "● GPS+PDR: %.6f, %.6f".format(pdrFusedLocation.lat, pdrFusedLocation.lng),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF1976D2)
+                                color = Color(0xFF7CB342)
                             )
                         }
                     }

@@ -27,9 +27,10 @@ private val FLOOR_CORNERS = listOf(
 class FloorPlanOverlayView(context: Context) : View(context) {
     private var kakaoMap: KakaoMap? = null
     private var floorBitmap: Bitmap? = null
-    private var locationLatLng: LatLng? = null       // 서버측위 (빨간 마커)
-    private var fusedLocationLatLng: LatLng? = null  // 구글 퓨즈드 (녹색 마커)
-    private var pdrLocationLatLng: LatLng? = null    // PDR 융합 (파란 마커)
+    private var locationLatLng: LatLng? = null          // 서버측위 (빨간)
+    private var pdrServerLocationLatLng: LatLng? = null // 서버+PDR (주황)
+    private var fusedLocationLatLng: LatLng? = null     // GPS (녹색)
+    private var pdrFusedLocationLatLng: LatLng? = null  // GPS+PDR (연두)
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
         alpha = 200
@@ -78,15 +79,21 @@ class FloorPlanOverlayView(context: Context) : View(context) {
         invalidate()
     }
 
+    fun updatePdrServerLocation(latLng: LatLng?) {
+        if (pdrServerLocationLatLng == latLng) return
+        pdrServerLocationLatLng = latLng
+        invalidate()
+    }
+
     fun updateFusedLocation(latLng: LatLng?) {
         if (fusedLocationLatLng == latLng) return
         fusedLocationLatLng = latLng
         invalidate()
     }
 
-    fun updatePdrLocation(latLng: LatLng?) {
-        if (pdrLocationLatLng == latLng) return
-        pdrLocationLatLng = latLng
+    fun updatePdrFusedLocation(latLng: LatLng?) {
+        if (pdrFusedLocationLatLng == latLng) return
+        pdrFusedLocationLatLng = latLng
         invalidate()
     }
 
@@ -119,67 +126,72 @@ class FloorPlanOverlayView(context: Context) : View(context) {
             }
         }
 
-        // 퓨즈드 위치 마커 (녹색) — 가장 아래 레이어
-        val fusedLoc = fusedLocationLatLng
-        if (fusedLoc != null) {
+        // GPS+PDR 마커 (연두) — 1레이어
+        pdrFusedLocationLatLng?.let {
             try {
-                val pt = map.toScreenPoint(fusedLoc)
-                if (pt != null) drawFusedLocationMarker(canvas, pt.x.toFloat(), pt.y.toFloat())
-            } catch (e: Exception) {
-                Log.e(TAG, "FloorOverlay 퓨즈드 마커 오류: ${e.message}", e)
-            }
+                map.toScreenPoint(it)?.let { pt -> drawPdrFusedLocationMarker(canvas, pt.x.toFloat(), pt.y.toFloat()) }
+            } catch (e: Exception) { Log.e(TAG, "FloorOverlay GPS+PDR 마커 오류: ${e.message}", e) }
         }
 
-        // PDR 위치 마커 (파란색) — 중간 레이어
-        val pdrLoc = pdrLocationLatLng
-        if (pdrLoc != null) {
+        // GPS 마커 (녹색) — 2레이어
+        fusedLocationLatLng?.let {
             try {
-                val pt = map.toScreenPoint(pdrLoc)
-                if (pt != null) drawPdrLocationMarker(canvas, pt.x.toFloat(), pt.y.toFloat())
-            } catch (e: Exception) {
-                Log.e(TAG, "FloorOverlay PDR 마커 오류: ${e.message}", e)
-            }
+                map.toScreenPoint(it)?.let { pt -> drawFusedLocationMarker(canvas, pt.x.toFloat(), pt.y.toFloat()) }
+            } catch (e: Exception) { Log.e(TAG, "FloorOverlay GPS 마커 오류: ${e.message}", e) }
         }
 
-        // 서버 위치 마커 (빨간색) — 최상위 레이어
-        val loc = locationLatLng
-        if (loc != null) {
+        // 서버+PDR 마커 (주황) — 3레이어
+        pdrServerLocationLatLng?.let {
             try {
-                val pt = map.toScreenPoint(loc)
-                if (pt != null) drawLocationMarker(canvas, pt.x.toFloat(), pt.y.toFloat())
-            } catch (e: Exception) {
-                Log.e(TAG, "FloorOverlay 서버 마커 오류: ${e.message}", e)
-            }
+                map.toScreenPoint(it)?.let { pt -> drawPdrServerLocationMarker(canvas, pt.x.toFloat(), pt.y.toFloat()) }
+            } catch (e: Exception) { Log.e(TAG, "FloorOverlay 서버+PDR 마커 오류: ${e.message}", e) }
+        }
+
+        // 서버 마커 (빨간) — 최상위 레이어
+        locationLatLng?.let {
+            try {
+                map.toScreenPoint(it)?.let { pt -> drawLocationMarker(canvas, pt.x.toFloat(), pt.y.toFloat()) }
+            } catch (e: Exception) { Log.e(TAG, "FloorOverlay 서버 마커 오류: ${e.message}", e) }
         }
     }
 
     private fun drawLocationMarker(canvas: Canvas, cx: Float, cy: Float) {
         val r = markerRadius
-        markerPaint.color = android.graphics.Color.argb(255, 233, 50, 43)   // 빨간 외곽
+        markerPaint.color = android.graphics.Color.argb(180, 233, 50, 43)
         canvas.drawCircle(cx, cy, r, markerPaint)
-        markerPaint.color = android.graphics.Color.WHITE
+        markerPaint.color = android.graphics.Color.argb(180, 255, 255, 255)
         canvas.drawCircle(cx, cy, r * 0.5f, markerPaint)
-        markerPaint.color = android.graphics.Color.argb(255, 233, 50, 43)   // 빨간 중심
+        markerPaint.color = android.graphics.Color.argb(180, 233, 50, 43)
+        canvas.drawCircle(cx, cy, r * 0.25f, markerPaint)
+    }
+
+    private fun drawPdrServerLocationMarker(canvas: Canvas, cx: Float, cy: Float) {
+        val r = markerRadius
+        markerPaint.color = android.graphics.Color.argb(180, 245, 124, 0)
+        canvas.drawCircle(cx, cy, r, markerPaint)
+        markerPaint.color = android.graphics.Color.argb(180, 255, 255, 255)
+        canvas.drawCircle(cx, cy, r * 0.5f, markerPaint)
+        markerPaint.color = android.graphics.Color.argb(180, 245, 124, 0)
         canvas.drawCircle(cx, cy, r * 0.25f, markerPaint)
     }
 
     private fun drawFusedLocationMarker(canvas: Canvas, cx: Float, cy: Float) {
         val r = markerRadius
-        markerPaint.color = android.graphics.Color.argb(255, 56, 142, 60)   // 녹색 외곽
+        markerPaint.color = android.graphics.Color.argb(180, 56, 142, 60)
         canvas.drawCircle(cx, cy, r, markerPaint)
-        markerPaint.color = android.graphics.Color.WHITE
+        markerPaint.color = android.graphics.Color.argb(180, 255, 255, 255)
         canvas.drawCircle(cx, cy, r * 0.5f, markerPaint)
-        markerPaint.color = android.graphics.Color.argb(255, 56, 142, 60)   // 녹색 중심
+        markerPaint.color = android.graphics.Color.argb(180, 56, 142, 60)
         canvas.drawCircle(cx, cy, r * 0.25f, markerPaint)
     }
 
-    private fun drawPdrLocationMarker(canvas: Canvas, cx: Float, cy: Float) {
+    private fun drawPdrFusedLocationMarker(canvas: Canvas, cx: Float, cy: Float) {
         val r = markerRadius
-        markerPaint.color = android.graphics.Color.argb(255, 25, 118, 210)   // 파란 외곽
+        markerPaint.color = android.graphics.Color.argb(180, 124, 179, 66)
         canvas.drawCircle(cx, cy, r, markerPaint)
-        markerPaint.color = android.graphics.Color.WHITE
+        markerPaint.color = android.graphics.Color.argb(180, 255, 255, 255)
         canvas.drawCircle(cx, cy, r * 0.5f, markerPaint)
-        markerPaint.color = android.graphics.Color.argb(255, 25, 118, 210)   // 파란 중심
+        markerPaint.color = android.graphics.Color.argb(180, 124, 179, 66)
         canvas.drawCircle(cx, cy, r * 0.25f, markerPaint)
     }
 

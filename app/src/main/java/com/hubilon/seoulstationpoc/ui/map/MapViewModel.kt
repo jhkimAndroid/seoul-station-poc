@@ -48,10 +48,11 @@ data class MapUiState(
     val isAutoScanning: Boolean = false,
     val isTracking: Boolean = false,
     val scanIntervalMs: Long = 1_000L,
-    val location: LocationResult? = null,
+    val location: LocationResult? = null,           // 서버측위 (빨간)
     val locationUpdateCount: Int = 0,
-    val fusedLocation: LocationResult? = null,
-    val pdrLocation: LocationResult? = null,
+    val pdrServerLocation: LocationResult? = null,  // 서버측위 + PDR (주황)
+    val fusedLocation: LocationResult? = null,      // GPS (녹색)
+    val pdrFusedLocation: LocationResult? = null,   // GPS + PDR (연두)
     val errorMessage: String? = null,
     val selectedFloor: FloorSelection = FloorSelection.HIDDEN,
     val fingerprintEntries: List<FingerprintEntry>? = null,
@@ -133,22 +134,27 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                     fusedLocationProvider.start(intervalMs)
                     pdrProcessor.start()
 
-                    // 퓨즈드 위치 업데이트를 자식 코루틴으로 수집
+                    // GPS 위치 수신 → GPS 마커 + GPS+PDR 마커 동시 갱신
                     launch {
                         fusedLocationProvider.locationFlow
                             .filterNotNull()
                             .collect { loc ->
-                                _uiState.update { it.copy(fusedLocation = loc) }
+                                _uiState.update { it.copy(
+                                    fusedLocation    = loc,
+                                    pdrFusedLocation = pdrProcessor.applyPdr(loc.lat, loc.lng)
+                                ) }
                             }
                     }
 
-                    // PDR 위치 업데이트를 자식 코루틴으로 수집
+                    // PDR 걸음 감지 → 현재 서버/GPS 좌표에 최신 변위 재적용
                     launch {
-                        pdrProcessor.pdrFlow
-                            .filterNotNull()
-                            .collect { loc ->
-                                _uiState.update { it.copy(pdrLocation = loc) }
-                            }
+                        pdrProcessor.stepCount.collect {
+                            val state = _uiState.value
+                            _uiState.update { it.copy(
+                                pdrServerLocation = state.location?.let { loc -> pdrProcessor.applyPdr(loc.lat, loc.lng) },
+                                pdrFusedLocation  = state.fusedLocation?.let { loc -> pdrProcessor.applyPdr(loc.lat, loc.lng) }
+                            ) }
+                        }
                     }
 
                     while (isActive) {
@@ -199,10 +205,11 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                                 val sensorValues = FingerprintBuilder.toSensorArray(sensorSnap)
                                 val location = apiClient.predict(FingerprintBuilder.toIntArray(entries), sensorValues)
                                 Log.i(TAG, "자동측위 #$cycleCount 위치 수신 — lat=${location.lat}, lng=${location.lng}")
-                                if (!pdrProcessor.hasAnchor) {
-                                    pdrProcessor.setAnchor(location.lat, location.lng)
-                                }
-                                _uiState.update { it.copy(location = location, locationUpdateCount = it.locationUpdateCount + 1) }
+                                _uiState.update { it.copy(
+                                    location          = location,
+                                    pdrServerLocation = pdrProcessor.applyPdr(location.lat, location.lng),
+                                    locationUpdateCount = it.locationUpdateCount + 1
+                                ) }
                             } catch (e: CancellationException) {
                                 // 새 요청으로 교체됐을 때 — 정상 흐름
                             } catch (e: Exception) {
@@ -218,7 +225,13 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                         pdrProcessor.stop()
                     }
                     Log.i(TAG, "자동측위 종료")
-                    _uiState.update { it.copy(isAutoScanning = false, location = null, fusedLocation = null, pdrLocation = null) }
+                    _uiState.update { it.copy(
+                        isAutoScanning    = false,
+                        location          = null,
+                        pdrServerLocation = null,
+                        fusedLocation     = null,
+                        pdrFusedLocation  = null
+                    ) }
                 }
             }
         }
