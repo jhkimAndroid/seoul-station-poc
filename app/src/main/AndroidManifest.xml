@@ -17,6 +17,9 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
 
+    <!-- WiFi RTT (FTM) — Android 12+ (API 31+) 에서 startRanging() 필수 -->
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+
     <!-- BLE (Android 11 이하, 일반 권한) -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
@@ -34,6 +37,7 @@
     <!-- 하드웨어 선언 (required=false: 없는 기기에도 설치 가능) -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
+    <uses-feature android:name="android.hardware.wifi.rtt" android:required="false" />
 
     <application
         android:name=".SeoulStationPocApplication"

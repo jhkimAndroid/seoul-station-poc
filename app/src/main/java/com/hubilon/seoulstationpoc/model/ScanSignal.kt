@@ -20,11 +20,21 @@ data class LteSignal(
     val isRegistered: Boolean // 연결된 셀 여부
 )
 
+data class RttSignal(
+    val bssid: String,
+    val distanceMm: Int,
+    val distanceStdDevMm: Int,
+    val rssi: Int,
+    val successCount: Int,
+    val attemptCount: Int
+)
+
 data class ScanData(
     val wifiSignals: List<WifiSignal> = emptyList(),
     val bleSignals: List<BleSignal> = emptyList(),
     val sensorSignal: SensorSignal? = null,
-    val lteSignals: List<LteSignal> = emptyList()
+    val lteSignals: List<LteSignal> = emptyList(),
+    val rttSignals: List<RttSignal> = emptyList()
 )
 
 data class LocationResult(

@@ -130,6 +130,7 @@ fun MapScreen(
     val location = uiState.location
     val pdrServerLocation = uiState.pdrServerLocation
     val fusedLocation = uiState.fusedLocation
+    val rttLocation = uiState.rttLocation
     val locationUpdateCount = uiState.locationUpdateCount
 
     // 네이티브 마커 홀더 (맵 인스턴스가 바뀌면 참조 무효화)
@@ -197,6 +198,9 @@ fun MapScreen(
                 )
                 view.updateFusedLocation(
                     if (isAutoScanning) fusedLocation?.let { LatLng.from(it.lat, it.lng) } else null
+                )
+                view.updateRttLocation(
+                    if (isAutoScanning) rttLocation?.let { LatLng.from(it.lat, it.lng) } else null
                 )
             }
         )
@@ -271,7 +275,7 @@ fun MapScreen(
         val hasBottom = uiState.isAutoScanning &&
                 (fingerprintEntries != null || errorMessage != null ||
                  location != null || pdrServerLocation != null ||
-                 fusedLocation != null)
+                 fusedLocation != null || rttLocation != null)
 
         if (hasBottom) {
             Surface(
@@ -325,6 +329,13 @@ fun MapScreen(
                                 text = "● GPS: %.6f, %.6f".format(fusedLocation.lat, fusedLocation.lng),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFF388E3C)
+                            )
+                        }
+                        if (rttLocation != null) {
+                            Text(
+                                text = "● RTT: %.6f, %.6f".format(rttLocation.lat, rttLocation.lng),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF9C27B0)
                             )
                         }
                     }

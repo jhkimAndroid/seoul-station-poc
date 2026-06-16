@@ -12,6 +12,7 @@ package com.hubilon.seoulstationpoc.util
  *  ViewModel 흐름     tag:SSP_VM
  *  지도·오버레이       tag:SSP_MAP
  *  앱 일반(초기화 등)  tag:SSP_APP
+ *  WiFi RTT 측거     tag:SSP_RTT
  * ─────────────────────────────────────────────────────────────────────
  *
  * 로그 레벨 사용 기준:
@@ -29,4 +30,5 @@ object AppLog {
     const val VM     = "SSP_VM"     // ViewModel — 스캔/API 흐름 조율
     const val MAP    = "SSP_MAP"    // 지도 화면 및 오버레이
     const val APP    = "SSP_APP"    // 앱 일반 (초기화, 권한 등)
+    const val RTT    = "SSP_RTT"    // WiFi RTT 측거
 }

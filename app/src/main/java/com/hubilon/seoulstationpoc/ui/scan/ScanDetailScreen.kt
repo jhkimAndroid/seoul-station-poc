@@ -38,6 +38,7 @@ import com.hubilon.seoulstationpoc.data.fingerprint.FingerprintEntry
 import com.hubilon.seoulstationpoc.data.fingerprint.MISSING_RSSI
 import com.hubilon.seoulstationpoc.model.BleSignal
 import com.hubilon.seoulstationpoc.model.LteSignal
+import com.hubilon.seoulstationpoc.model.RttSignal
 import com.hubilon.seoulstationpoc.model.WifiSignal
 import com.hubilon.seoulstationpoc.ui.map.MapViewModel
 
@@ -51,7 +52,9 @@ fun ScanDetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val initialTab = when (startSection) {
         "ble"         -> 1
-        "fingerprint" -> 2
+        "lte"         -> 2
+        "rtt"         -> 3
+        "fingerprint" -> 4
         else          -> 0
     }
     var selectedTab by remember { mutableIntStateOf(initialTab) }
@@ -99,6 +102,11 @@ fun ScanDetailScreen(
                 Tab(
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
+                    text = { Text("RTT (${uiState.rttSignals.size})") }
+                )
+                Tab(
+                    selected = selectedTab == 4,
+                    onClick = { selectedTab = 4 },
                     text = { Text("매칭 ($matchCount/${fingerprintEntries?.size ?: 0})") }
                 )
             }
@@ -107,7 +115,8 @@ fun ScanDetailScreen(
                 0 -> WifiSignalList(signals = uiState.scanData.wifiSignals)
                 1 -> BleSignalList(signals = uiState.scanData.bleSignals)
                 2 -> LteSignalList(signals = uiState.scanData.lteSignals)
-                3 -> FingerprintList(entries = fingerprintEntries)
+                3 -> RttSignalList(signals = uiState.rttSignals)
+                4 -> FingerprintList(entries = fingerprintEntries)
             }
         }
     }
@@ -246,6 +255,39 @@ private fun RssiChip(rssi: Int) {
             color = contentColor
         )
     }
+}
+
+@Composable
+private fun RttSignalList(signals: List<RttSignal>) {
+    if (signals.isEmpty()) {
+        EmptyContent("수집된 RTT 결과가 없습니다")
+    } else {
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            items(signals, key = { it.bssid }) { signal ->
+                RttSignalItem(signal)
+                HorizontalDivider()
+            }
+        }
+    }
+}
+
+@Composable
+private fun RttSignalItem(signal: RttSignal) {
+    val distanceM = signal.distanceMm / 1000.0
+    val stdDevM   = signal.distanceStdDevMm / 1000.0
+    ListItem(
+        headlineContent = {
+            Text("%.2f m  ±%.2f m".format(distanceM, stdDevM))
+        },
+        supportingContent = {
+            Text(
+                text = "${signal.bssid}  ·  ${signal.successCount}/${signal.attemptCount}회",
+                style = MaterialTheme.typography.bodySmall
+            )
+        },
+        leadingContent = { SignalTypeTag(color = MaterialTheme.colorScheme.primary, label = "RTT") },
+        trailingContent = { RssiChip(signal.rssi) }
+    )
 }
 
 @Composable

@@ -50,6 +50,11 @@ class IntroViewModel(application: Application) : AndroidViewModel(application) {
                 permission = Manifest.permission.BLUETOOTH_CONNECT,
                 description = "BLE 기기 연결에 필요합니다"
             ))
+            add(PermissionItem(
+                title = "주변 WiFi 기기",
+                permission = Manifest.permission.NEARBY_WIFI_DEVICES,
+                description = "WiFi RTT(FTM) 거리 측정에 필요합니다"
+            ))
         }
     }
 

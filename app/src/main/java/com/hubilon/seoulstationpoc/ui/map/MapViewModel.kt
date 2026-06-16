@@ -1,6 +1,7 @@
 package com.hubilon.seoulstationpoc.ui.map
 
 import android.app.Application
+import android.os.Build
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,13 +14,16 @@ import com.hubilon.seoulstationpoc.data.location.FusedLocationProvider
 import com.hubilon.seoulstationpoc.data.pdr.PdrProcessor
 import com.hubilon.seoulstationpoc.data.fingerprint.FingerprintEntry
 import com.hubilon.seoulstationpoc.data.fingerprint.MISSING_RSSI
+import com.hubilon.seoulstationpoc.data.rtt.RttScanner
 import com.hubilon.seoulstationpoc.data.sensor.SensorCollector
 import com.hubilon.seoulstationpoc.data.wifi.WifiScanner
 import com.hubilon.seoulstationpoc.model.BleSignal
 import com.hubilon.seoulstationpoc.model.LocationResult
+import com.hubilon.seoulstationpoc.model.RttSignal
 import com.hubilon.seoulstationpoc.model.ScanData
 import com.hubilon.seoulstationpoc.model.WifiSignal
 import com.hubilon.seoulstationpoc.util.AppLog
+import com.hubilon.seoulstationpoc.util.AppLogger
 import com.hubilon.seoulstationpoc.util.ScanLogger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +61,8 @@ data class MapUiState(
     val locationUpdateCount: Int = 0,
     val isPdrEnabled: Boolean = true,
     val isKalmanEnabled: Boolean = false,
+    val rttSignals: List<RttSignal> = emptyList(),
+    val rttLocation: LocationResult? = null,          // RTT 측위 (보라)
     val pdrServerLocation: LocationResult? = null,  // 서버측위 + PDR (주황)
     val fusedLocation: LocationResult? = null,      // GPS (녹색)
     val errorMessage: String? = null,
@@ -73,14 +79,20 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
     private val sensorCollector       = SensorCollector(application.applicationContext)
     private val fusedLocationProvider = FusedLocationProvider(application.applicationContext)
     private val pdrProcessor          = PdrProcessor(application.applicationContext)
-    private val apiClient             = LocationApiClient()
+    private val appLogger             = AppLogger(application.applicationContext)
+    private val apiClient             = LocationApiClient(appLogger)
     private val scanLogger            = ScanLogger(application.applicationContext)
     private val locationFilter        = LocationKalmanFilter()
+    private val rttLocationFilter     = LocationKalmanFilter(measurementNoiseSigma = 3.0)
+    private val rttScanner            = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        RttScanner(application.applicationContext)
+    } else null
 
     private val _uiState = MutableStateFlow(MapUiState())
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
 
     private var autoScanJob: Job? = null
+    private var rttJob: Job? = null
 
     init {
         loadFeatures()
@@ -140,10 +152,13 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
         if (enabling) {
             _uiState.update { it.copy(isKalmanEnabled = true) }
             Log.i(TAG, "칼만필터 ON")
+            appLogger.i(TAG, "칼만필터 ON")
         } else {
             locationFilter.reset()
+            rttLocationFilter.reset()
             _uiState.update { it.copy(isKalmanEnabled = false) }
             Log.i(TAG, "칼만필터 OFF — 필터 초기화")
+            appLogger.i(TAG, "칼만필터 OFF — 필터 초기화")
         }
     }
 
@@ -169,10 +184,12 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleAutoScan() {
         if (autoScanJob?.isActive == true) {
             Log.i(TAG, "자동측위 중지 요청")
+            appLogger.i(TAG, "자동측위 중지 요청")
             autoScanJob?.cancel()
         } else {
             val intervalMs = _uiState.value.scanIntervalMs
             Log.i(TAG, "자동측위 시작 — tracker간격=${intervalMs}ms anchor간격=${ANCHOR_INTERVAL_MS}ms")
+            appLogger.i(TAG, "자동측위 시작 — tracker간격=${intervalMs}ms anchor간격=${ANCHOR_INTERVAL_MS}ms")
             _uiState.update { it.copy(isAutoScanning = true, errorMessage = null) }
             autoScanJob = viewModelScope.launch {
                 val bleAccumulator  = mutableMapOf<String, BleSignal>()
@@ -187,6 +204,46 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                     sensorCollector.start()
                     fusedLocationProvider.start(intervalMs)
                     pdrProcessor.start()
+
+                    // RTT 스캔 — 자동측위와 동일한 intervalMs 주기로 독립 실행
+                    if (rttScanner != null && rttScanner.isSupported) {
+                        rttJob = launch {
+                            while (isActive) {
+                                val cycleStart = System.currentTimeMillis()
+                                try {
+                                    val signals = rttScanner.scan()
+                                    _uiState.update { it.copy(rttSignals = signals) }
+                                    if (signals.isNotEmpty()) {
+                                        appLogger.d(TAG, "RTT AP ${signals.size}개 발견")
+                                        try {
+                                            val raw = apiClient.rttPredict(signals)
+                                            val loc = if (_uiState.value.isKalmanEnabled)
+                                                rttLocationFilter.update(raw.lat, raw.lng) else raw
+                                            _uiState.update { it.copy(rttLocation = loc) }
+                                            Log.i(TAG, "RTT 측위 — raw=(${raw.lat},${raw.lng}) filtered=(${loc.lat},${loc.lng})")
+                                            appLogger.i(TAG, "RTT 측위 결과 — raw=(${raw.lat},${raw.lng}) filtered=(${loc.lat},${loc.lng})")
+                                        } catch (e: CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            Log.w(TAG, "RTT predict 오류: ${e.message}")
+                                            appLogger.w(TAG, "RTT predict 오류: ${e.message}")
+                                        }
+                                    }
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "RTT 스캔 오류: ${e.message}")
+                                    appLogger.w(TAG, "RTT 스캔 오류: ${e.message}")
+                                }
+                                val remaining = intervalMs - (System.currentTimeMillis() - cycleStart)
+                                if (remaining > 0) delay(remaining)
+                            }
+                        }
+                        Log.i(TAG, "RTT 스캔 시작")
+                        appLogger.i(TAG, "RTT 스캔 시작 (intervalMs=${intervalMs}ms)")
+                    } else {
+                        Log.d(TAG, "RTT 미지원 — 스캔 생략")
+                    }
 
                     // GPS 위치 수신 → GPS 마커 갱신
                     launch {
@@ -323,10 +380,16 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                         pdrProcessor.stop()
                     }
                     locationFilter.reset()
+                    rttLocationFilter.reset()
+                    rttJob?.cancel()
+                    rttJob = null
                     Log.i(TAG, "[자동측위] 종료")
+                    appLogger.i(TAG, "[자동측위] 종료")
                     _uiState.update {
                         it.copy(
                             isAutoScanning    = false,
+                            rttSignals        = emptyList(),
+                            rttLocation       = null,
                             location          = null,
                             pdrServerLocation = null,
                             fusedLocation     = null
@@ -343,9 +406,12 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun shutDown() {
         Log.i(TAG, "shutDown — 자동스캔 및 BLE 즉시 정리")
+        appLogger.i(TAG, "shutDown — 자동스캔 및 BLE 즉시 정리")
         autoScanJob?.cancel()
+        rttJob?.cancel()
         bleScanner.stopScan()
         scanLogger.close()
+        appLogger.close()
     }
 
     override fun onCleared() {
