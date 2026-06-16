@@ -6,7 +6,7 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.util.Log
-import com.hubilon.seoulstationpoc.domain.model.BleSignal
+import com.hubilon.seoulstationpoc.model.BleSignal
 import com.hubilon.seoulstationpoc.util.AppLog
 
 private const val TAG = AppLog.BLE

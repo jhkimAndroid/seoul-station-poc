@@ -30,7 +30,6 @@ class FloorPlanOverlayView(context: Context) : View(context) {
     private var locationLatLng: LatLng? = null          // 서버측위 (빨간)
     private var pdrServerLocationLatLng: LatLng? = null // 서버+PDR (주황)
     private var fusedLocationLatLng: LatLng? = null     // GPS (녹색)
-    private var pdrFusedLocationLatLng: LatLng? = null  // GPS+PDR (연두)
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
         alpha = 200
@@ -91,12 +90,6 @@ class FloorPlanOverlayView(context: Context) : View(context) {
         invalidate()
     }
 
-    fun updatePdrFusedLocation(latLng: LatLng?) {
-        if (pdrFusedLocationLatLng == latLng) return
-        pdrFusedLocationLatLng = latLng
-        invalidate()
-    }
-
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val map = kakaoMap ?: return
@@ -126,14 +119,7 @@ class FloorPlanOverlayView(context: Context) : View(context) {
             }
         }
 
-        // GPS+PDR 마커 (연두) — 1레이어
-        pdrFusedLocationLatLng?.let {
-            try {
-                map.toScreenPoint(it)?.let { pt -> drawPdrFusedLocationMarker(canvas, pt.x.toFloat(), pt.y.toFloat()) }
-            } catch (e: Exception) { Log.e(TAG, "FloorOverlay GPS+PDR 마커 오류: ${e.message}", e) }
-        }
-
-        // GPS 마커 (녹색) — 2레이어
+        // GPS 마커 (녹색) — 1레이어
         fusedLocationLatLng?.let {
             try {
                 map.toScreenPoint(it)?.let { pt -> drawFusedLocationMarker(canvas, pt.x.toFloat(), pt.y.toFloat()) }
@@ -182,16 +168,6 @@ class FloorPlanOverlayView(context: Context) : View(context) {
         markerPaint.color = android.graphics.Color.argb(180, 255, 255, 255)
         canvas.drawCircle(cx, cy, r * 0.5f, markerPaint)
         markerPaint.color = android.graphics.Color.argb(180, 56, 142, 60)
-        canvas.drawCircle(cx, cy, r * 0.25f, markerPaint)
-    }
-
-    private fun drawPdrFusedLocationMarker(canvas: Canvas, cx: Float, cy: Float) {
-        val r = markerRadius
-        markerPaint.color = android.graphics.Color.argb(180, 124, 179, 66)
-        canvas.drawCircle(cx, cy, r, markerPaint)
-        markerPaint.color = android.graphics.Color.argb(180, 255, 255, 255)
-        canvas.drawCircle(cx, cy, r * 0.5f, markerPaint)
-        markerPaint.color = android.graphics.Color.argb(180, 124, 179, 66)
         canvas.drawCircle(cx, cy, r * 0.25f, markerPaint)
     }
 

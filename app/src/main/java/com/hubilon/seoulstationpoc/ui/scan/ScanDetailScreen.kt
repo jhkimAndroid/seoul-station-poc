@@ -36,8 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hubilon.seoulstationpoc.data.fingerprint.FingerprintEntry
 import com.hubilon.seoulstationpoc.data.fingerprint.MISSING_RSSI
-import com.hubilon.seoulstationpoc.domain.model.BleSignal
-import com.hubilon.seoulstationpoc.domain.model.WifiSignal
+import com.hubilon.seoulstationpoc.model.BleSignal
+import com.hubilon.seoulstationpoc.model.LteSignal
+import com.hubilon.seoulstationpoc.model.WifiSignal
 import com.hubilon.seoulstationpoc.ui.map.MapViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -93,6 +94,11 @@ fun ScanDetailScreen(
                 Tab(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
+                    text = { Text("LTE (${uiState.scanData.lteSignals.size})") }
+                )
+                Tab(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
                     text = { Text("매칭 ($matchCount/${fingerprintEntries?.size ?: 0})") }
                 )
             }
@@ -100,7 +106,8 @@ fun ScanDetailScreen(
             when (selectedTab) {
                 0 -> WifiSignalList(signals = uiState.scanData.wifiSignals)
                 1 -> BleSignalList(signals = uiState.scanData.bleSignals)
-                2 -> FingerprintList(entries = fingerprintEntries)
+                2 -> LteSignalList(signals = uiState.scanData.lteSignals)
+                3 -> FingerprintList(entries = fingerprintEntries)
             }
         }
     }
@@ -132,6 +139,43 @@ private fun BleSignalList(signals: List<BleSignal>) {
             }
         }
     }
+}
+
+@Composable
+private fun LteSignalList(signals: List<LteSignal>) {
+    if (signals.isEmpty()) {
+        EmptyContent("수집된 LTE 셀 정보가 없습니다")
+    } else {
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            itemsIndexed(signals) { index, signal ->
+                LteSignalItem(signal)
+                HorizontalDivider()
+            }
+        }
+    }
+}
+
+@Composable
+private fun LteSignalItem(signal: LteSignal) {
+    val tagColor = if (signal.isRegistered)
+        MaterialTheme.colorScheme.error
+    else
+        MaterialTheme.colorScheme.secondary
+    val tagLabel = if (signal.isRegistered) "서빙" else "주변"
+
+    ListItem(
+        headlineContent = {
+            Text("PCI ${signal.pci}  ·  TAC ${signal.tac}")
+        },
+        supportingContent = {
+            Text(
+                text = "RSRP ${signal.rsrp} dBm  ·  RSRQ ${signal.rsrq} dB",
+                style = MaterialTheme.typography.bodySmall
+            )
+        },
+        leadingContent = { SignalTypeTag(color = tagColor, label = tagLabel) },
+        trailingContent = { RssiChip(signal.rsrp) }
+    )
 }
 
 @Composable

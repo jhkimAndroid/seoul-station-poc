@@ -9,7 +9,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
 import android.util.Log
-import com.hubilon.seoulstationpoc.domain.model.LocationResult
+import com.hubilon.seoulstationpoc.model.LocationResult
 import com.hubilon.seoulstationpoc.util.AppLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -129,7 +130,6 @@ fun MapScreen(
     val location = uiState.location
     val pdrServerLocation = uiState.pdrServerLocation
     val fusedLocation = uiState.fusedLocation
-    val pdrFusedLocation = uiState.pdrFusedLocation
     val locationUpdateCount = uiState.locationUpdateCount
 
     // 네이티브 마커 홀더 (맵 인스턴스가 바뀌면 참조 무효화)
@@ -181,29 +181,41 @@ fun MapScreen(
         )
 
         // 층 평면도 오버레이 + 위치 마커 (마커는 평면도 위에 그림)
+        val isAutoScanning = uiState.isAutoScanning
+        val isPdrEnabled   = uiState.isPdrEnabled
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { FloorPlanOverlayView(it) },
             update = { view ->
                 view.updateMap(kakaoMap)
                 view.updateBitmap(floorBitmap)
-                view.updateLocation(location?.let { LatLng.from(it.lat, it.lng) })
-                view.updatePdrServerLocation(pdrServerLocation?.let { LatLng.from(it.lat, it.lng) })
-                view.updateFusedLocation(fusedLocation?.let { LatLng.from(it.lat, it.lng) })
-                view.updatePdrFusedLocation(pdrFusedLocation?.let { LatLng.from(it.lat, it.lng) })
+                view.updateLocation(
+                    if (isAutoScanning) location?.let { LatLng.from(it.lat, it.lng) } else null
+                )
+                view.updatePdrServerLocation(
+                    if (isAutoScanning && isPdrEnabled) pdrServerLocation?.let { LatLng.from(it.lat, it.lng) } else null
+                )
+                view.updateFusedLocation(
+                    if (isAutoScanning) fusedLocation?.let { LatLng.from(it.lat, it.lng) } else null
+                )
             }
         )
 
-        // 좌상단: 스캔결과 버튼
-        MapIconButton(
-            icon = Icons.Default.Menu,
-            contentDescription = "스캔결과",
-            onClick = { onNavigateToScanDetail("wifi") },
+        // 좌상단: 스캔결과 버튼 + PDR 토글 버튼
+        Row(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .statusBarsPadding()
-                .padding(top = 8.dp, start = 8.dp)
-        )
+                .padding(top = 8.dp, start = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            MapIconButton(
+                painter = painterResource(R.drawable.icon_log),
+                contentDescription = "스캔결과",
+                onClick = { onNavigateToScanDetail("wifi") }
+            )
+        }
 
         // 우측 중앙: 추적토글 / 1회스캔 / 자동스캔 (세로 정렬)
         Column(
@@ -213,22 +225,22 @@ fun MapScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             MapIconButton(
-                painter = painterResource(R.drawable.ic_tracking),
+                painter = painterResource(R.drawable.icon_trace),
                 contentDescription = "추적",
                 onClick = { viewModel.toggleTracking() },
                 isActive = uiState.isTracking
             )
             MapIconButton(
-                painter = painterResource(R.drawable.ic_auto_scan),
-                contentDescription = "자동스캔",
+                painter = painterResource(R.drawable.icon_location),
+                contentDescription = "서버측위",
                 onClick = { viewModel.toggleAutoScan() },
                 isActive = uiState.isAutoScanning
             )
-            MapLabeledIconButton(
-                icon = Icons.Default.Refresh,
-                label = "PDR",
-                contentDescription = "PDR 초기화",
-                onClick = { viewModel.resetPdr() }
+            MapIconButton(
+                painter = painterResource(R.drawable.icon_filter),
+                contentDescription = "칼만필터 토글",
+                onClick = { viewModel.toggleKalman() },
+                isActive = uiState.isKalmanEnabled
             )
         }
 
@@ -259,7 +271,7 @@ fun MapScreen(
         val hasBottom = uiState.isAutoScanning &&
                 (fingerprintEntries != null || errorMessage != null ||
                  location != null || pdrServerLocation != null ||
-                 fusedLocation != null || pdrFusedLocation != null)
+                 fusedLocation != null)
 
         if (hasBottom) {
             Surface(
@@ -313,13 +325,6 @@ fun MapScreen(
                                 text = "● GPS: %.6f, %.6f".format(fusedLocation.lat, fusedLocation.lng),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFF388E3C)
-                            )
-                        }
-                        if (pdrFusedLocation != null) {
-                            Text(
-                                text = "● GPS+PDR: %.6f, %.6f".format(pdrFusedLocation.lat, pdrFusedLocation.lng),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF7CB342)
                             )
                         }
                     }
@@ -429,16 +434,19 @@ private fun MapLabeledIconButton(
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isActive: Boolean = false,
     enabled: Boolean = true
 ) {
-    val bgColor = if (enabled)
-        MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
-    else
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
-    val contentColor = if (enabled)
-        MaterialTheme.colorScheme.onSurface
-    else
-        MaterialTheme.colorScheme.onSurfaceVariant
+    val bgColor = when {
+        isActive -> MaterialTheme.colorScheme.primaryContainer
+        !enabled -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+        else     -> MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+    }
+    val contentColor = when {
+        isActive -> MaterialTheme.colorScheme.onPrimaryContainer
+        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
+        else     -> MaterialTheme.colorScheme.onSurface
+    }
 
     Surface(
         shape = MaterialTheme.shapes.small,

@@ -9,9 +9,10 @@ import android.util.Log
 import com.hubilon.seoulstationpoc.data.fingerprint.FingerprintBuilder
 import com.hubilon.seoulstationpoc.data.fingerprint.FingerprintEntry
 import com.hubilon.seoulstationpoc.data.fingerprint.MISSING_RSSI
-import com.hubilon.seoulstationpoc.domain.model.BleSignal
-import com.hubilon.seoulstationpoc.domain.model.SensorSignal
-import com.hubilon.seoulstationpoc.domain.model.WifiSignal
+import com.hubilon.seoulstationpoc.model.BleSignal
+import com.hubilon.seoulstationpoc.model.LteSignal
+import com.hubilon.seoulstationpoc.model.SensorSignal
+import com.hubilon.seoulstationpoc.model.WifiSignal
 import java.io.File
 import java.io.OutputStream
 import java.text.SimpleDateFormat
@@ -51,14 +52,15 @@ class ScanLogger(context: Context) {
      *
      * 파일 1 (RAW): 실제 감지된 BLE/WiFi 신호만 저장.
      * 파일 2 (PRED): 서버 전송과 동일한 856개 피처 저장.
-     *   - entries 847행 (미감지 -110 포함, feature_idx 순서)
-     *   - sensor 9행 (accX/Y/Z, gyroX/Y/Z, magX/Y/Z)
+     *   - entries (미감지 -110 포함, feature_idx 순서)
+     *   - sensor 최대 18행 (acc/gyro/mag 각 body(x/y/z) + world(wx/wy/wz))
      */
     fun logScan(
         bleSignals: List<BleSignal>,
         wifiSignals: List<WifiSignal>,
         entries: List<FingerprintEntry>,
-        sensor: SensorSignal? = null
+        sensor: SensorSignal? = null,
+        lteSignals: List<LteSignal> = emptyList()
     ) {
         val ts = cycleTimeFmt.format(Date())
         val ssidMap      = wifiSignals.associate { it.bssid.lowercase() to it.ssid }
@@ -81,8 +83,17 @@ class ScanLogger(context: Context) {
                 "WIFI", signal.ssid, signal.bssid, signal.rssi.toString(), matched
             )
         }
+        for (signal in lteSignals) {
+            val tag = if (signal.isRegistered) "서빙" else "주변"
+            writeLine(
+                rawStream,
+                (++rawRowCount).toString(), ts,
+                "LTE", tag, "${signal.pci}:${signal.tac}",
+                "rsrp=${signal.rsrp} rsrq=${signal.rsrq}", ""
+            )
+        }
 
-        // ── 파일 2: 서버 전송 피처 (856개) ───────────────────────────
+        // ── 파일 2: 서버 전송 피처 ───────────────────────────
         for (entry in entries) {
             val type    = if (entry.isBle) "BLE" else "WIFI"
             val name    = if (entry.isBle) "" else ssidMap[entry.mac] ?: ""

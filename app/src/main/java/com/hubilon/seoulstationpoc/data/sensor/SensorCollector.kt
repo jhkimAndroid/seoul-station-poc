@@ -8,7 +8,7 @@ import android.hardware.SensorManager
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
-import com.hubilon.seoulstationpoc.domain.model.SensorSignal
+import com.hubilon.seoulstationpoc.model.SensorSignal
 import com.hubilon.seoulstationpoc.util.AppLog
 
 private const val TAG = AppLog.SENSOR
@@ -77,22 +77,28 @@ class SensorCollector(context: Context) {
 
         return if (rm != null) {
             SensorSignal(
-                accelX = rm[0]*a[0] + rm[1]*a[1] + rm[2]*a[2],
-                accelY = rm[3]*a[0] + rm[4]*a[1] + rm[5]*a[2],
-                accelZ = rm[6]*a[0] + rm[7]*a[1] + rm[8]*a[2],
-                gyroX  = rm[0]*g[0] + rm[1]*g[1] + rm[2]*g[2],
-                gyroY  = rm[3]*g[0] + rm[4]*g[1] + rm[5]*g[2],
-                gyroZ  = rm[6]*g[0] + rm[7]*g[1] + rm[8]*g[2],
-                magX   = rm[0]*m[0] + rm[1]*m[1] + rm[2]*m[2],
-                magY   = rm[3]*m[0] + rm[4]*m[1] + rm[5]*m[2],
-                magZ   = rm[6]*m[0] + rm[7]*m[1] + rm[8]*m[2],
+                accelX = a[0], accelY = a[1], accelZ = a[2],
+                accelWX = rm[0]*a[0] + rm[1]*a[1] + rm[2]*a[2],
+                accelWY = rm[3]*a[0] + rm[4]*a[1] + rm[5]*a[2],
+                accelWZ = rm[6]*a[0] + rm[7]*a[1] + rm[8]*a[2],
+                gyroX  = g[0], gyroY  = g[1], gyroZ  = g[2],
+                gyroWX  = rm[0]*g[0] + rm[1]*g[1] + rm[2]*g[2],
+                gyroWY  = rm[3]*g[0] + rm[4]*g[1] + rm[5]*g[2],
+                gyroWZ  = rm[6]*g[0] + rm[7]*g[1] + rm[8]*g[2],
+                magX   = m[0], magY   = m[1], magZ   = m[2],
+                magWX   = rm[0]*m[0] + rm[1]*m[1] + rm[2]*m[2],
+                magWY   = rm[3]*m[0] + rm[4]*m[1] + rm[5]*m[2],
+                magWZ   = rm[6]*m[0] + rm[7]*m[1] + rm[8]*m[2],
             )
         } else {
             Log.w(TAG, "회전 행렬 미획득 — body frame 반환")
             SensorSignal(
                 accelX = a[0], accelY = a[1], accelZ = a[2],
+                accelWX = a[0], accelWY = a[1], accelWZ = a[2],
                 gyroX  = g[0], gyroY  = g[1], gyroZ  = g[2],
+                gyroWX  = g[0], gyroWY  = g[1], gyroWZ  = g[2],
                 magX   = m[0], magY   = m[1], magZ   = m[2],
+                magWX   = m[0], magWY   = m[1], magWZ   = m[2],
             )
         }
     }

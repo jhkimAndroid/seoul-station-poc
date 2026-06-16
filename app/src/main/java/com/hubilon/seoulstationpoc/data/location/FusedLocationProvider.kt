@@ -9,7 +9,7 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import com.hubilon.seoulstationpoc.domain.model.LocationResult as AppLocationResult
+import com.hubilon.seoulstationpoc.model.LocationResult as AppLocationResult
 import com.hubilon.seoulstationpoc.util.AppLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

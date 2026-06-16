@@ -23,6 +23,7 @@ package com.hubilon.seoulstationpoc.util
 object AppLog {
     const val BLE    = "SSP_BLE"    // BLE 스캔 관련
     const val WIFI   = "SSP_WIFI"   // WiFi 스캔 관련
+    const val LTE    = "SSP_LTE"    // LTE 셀 스캔 관련
     const val SENSOR = "SSP_SENSOR" // 센서 수집 관련
     const val API    = "SSP_API"    // 서버 API 통신
     const val VM     = "SSP_VM"     // ViewModel — 스캔/API 흐름 조율

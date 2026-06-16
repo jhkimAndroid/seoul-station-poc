@@ -4,7 +4,7 @@ import android.content.Context
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.util.Log
-import com.hubilon.seoulstationpoc.domain.model.WifiSignal
+import com.hubilon.seoulstationpoc.model.WifiSignal
 import com.hubilon.seoulstationpoc.util.AppLog
 
 private const val TAG = AppLog.WIFI
