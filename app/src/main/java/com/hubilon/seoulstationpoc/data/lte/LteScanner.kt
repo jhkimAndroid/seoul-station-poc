@@ -23,6 +23,7 @@ class LteScanner(context: Context) {
             }
             val signals = cellInfoList
                 .filterIsInstance<CellInfoLte>()
+                .filter { it.isRegistered }   // 등록된 서빙 셀만 사용
                 .mapNotNull { info ->
                     val id  = info.cellIdentity
                     val sig = info.cellSignalStrength
@@ -34,19 +35,19 @@ class LteScanner(context: Context) {
                         Log.d(TAG, "유효하지 않은 셀 생략 — pci=$pci rsrp=$rsrp")
                         return@mapNotNull null
                     }
-                    Log.i(TAG, "LTE 스캔 pci : $pci, tac : $tac, rsrp : $rsrp, rsrq : $rsrq")
+                    Log.i(TAG, "LTE 서빙셀 — pci=$pci tac=$tac rsrp=$rsrp rsrq=$rsrq")
                     LteSignal(
                         pci          = pci,
                         tac          = if (tac.isValidCell()) tac else -1,
-                        rawTac       = tac,   // 서버 identifier 매칭용 원본 값 유지
+                        rawTac       = tac,
                         rsrp         = rsrp,
                         rsrq         = if (rsrq.isValidCell()) rsrq else 0,
-                        isRegistered = info.isRegistered
+                        isRegistered = true
                     )
                 }
-            Log.i(TAG, "LTE 스캔 완료 — ${signals.size}개 (연결: ${signals.count { it.isRegistered }})")
+            Log.i(TAG, "LTE 스캔 완료 — 서빙셀 ${signals.size}개")
             signals.forEach { s ->
-                Log.d(TAG, "  ${if (s.isRegistered) "[서빙]" else "[주변]"} pci=${s.pci} tac=${s.tac} rsrp=${s.rsrp}dBm rsrq=${s.rsrq}dB")
+                Log.d(TAG, "  [서빙] pci=${s.pci} tac=${s.tac} rsrp=${s.rsrp}dBm rsrq=${s.rsrq}dB")
             }
             signals
         } catch (e: SecurityException) {

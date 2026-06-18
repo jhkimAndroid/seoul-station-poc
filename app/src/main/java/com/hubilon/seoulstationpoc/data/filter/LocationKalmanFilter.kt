@@ -15,9 +15,11 @@ import kotlin.math.cos
  *   processNoiseSigma     — 가속도 불확실성 [m/s²]. 보행 환경 0.3~1.0 권장.
  */
 class LocationKalmanFilter(
-    private val measurementNoiseSigma: Double = 5.0,
-    private val processNoiseSigma: Double = 0.5
+    measurementNoiseSigma: Double = 5.0,
+    processNoiseSigma: Double = 0.5
 ) {
+    var measurementNoiseSigma: Double = measurementNoiseSigma
+    var processNoiseSigma: Double = processNoiseSigma
     private var x = DoubleArray(4)          // [x_m, y_m, vx, vy]
     private var P = identity4()             // 4×4 공분산
     private var origin: DoubleArray? = null // [lat0, lng0]

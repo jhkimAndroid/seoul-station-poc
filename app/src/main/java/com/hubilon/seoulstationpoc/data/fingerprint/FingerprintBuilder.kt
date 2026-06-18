@@ -87,15 +87,15 @@ object FingerprintBuilder {
 
         val bleRssiMap  = scanData.bleSignals.associate  { it.deviceAddress.lowercase() to it.rssi }
         val wifiRssiMap = scanData.wifiSignals.associate { it.bssid.lowercase()         to it.rssi }
-        val lteMap      = scanData.lteSignals.associate  { "${it.pci}:${it.rawTac}"     to it     }
+        val registeredLte = scanData.lteSignals.firstOrNull()  // isRegistered==true 만 수신됨
 
         return FloatArray(features.size) { i ->
             val f = features[i]
             when (f.type) {
                 "wifi"     -> (wifiRssiMap[f.identifier.lowercase()] ?: MISSING_RSSI).toFloat()
                 "ble"      -> (bleRssiMap[f.identifier.lowercase()]  ?: MISSING_RSSI).toFloat()
-                "lte_rsrp" -> lteMap[f.identifier]?.rsrp?.toFloat() ?: -140f
-                "lte_rsrq" -> lteMap[f.identifier]?.rsrq?.toFloat() ?: -20f
+                "lte_rsrp" -> registeredLte?.rsrp?.toFloat() ?: -140f
+                "lte_rsrq" -> registeredLte?.rsrq?.toFloat() ?: -20f
                 else       -> sensorValue(f.identifier, scanData.sensorSignal)
             }
         }

@@ -54,10 +54,10 @@ class LocationApiClient(private val appLogger: AppLogger? = null) {
         return predict(ANCHOR_PREDICT_URL, values)
     }
 
-    suspend fun trackerPredict(values: FloatArray): LocationResult {
-        Log.d(TAG, "[tracker] POST $TRACKER_PREDICT_URL | features=${values.size}개")
-        appLogger?.d(TAG, "[tracker] POST $TRACKER_PREDICT_URL | features=${values.size}개")
-        return predict(TRACKER_PREDICT_URL, values)
+    suspend fun trackerPredict(values: FloatArray, pdrLat: Double = -999.0, pdrLon: Double = -999.0): LocationResult {
+        Log.d(TAG, "[tracker] POST $TRACKER_PREDICT_URL | features=${values.size}개 pdr=($pdrLat,$pdrLon)")
+        appLogger?.d(TAG, "[tracker] POST $TRACKER_PREDICT_URL | features=${values.size}개 pdr=($pdrLat,$pdrLon)")
+        return predict(TRACKER_PREDICT_URL, values, pdrLat, pdrLon)
     }
 
     suspend fun rttPredict(signals: List<RttSignal>): LocationResult {
@@ -131,11 +131,18 @@ class LocationApiClient(private val appLogger: AppLogger? = null) {
         }
     }
 
-    private suspend fun predict(endpoint: String, values: FloatArray): LocationResult =
+    private suspend fun predict(
+        endpoint: String,
+        values: FloatArray,
+        pdrLat: Double = -999.0,
+        pdrLon: Double = -999.0
+    ): LocationResult =
         suspendCancellableCoroutine { cont ->
             val startMs = System.currentTimeMillis()
             val jsonBody = JSONObject().apply {
                 put("values", JSONArray().also { arr -> values.forEach { arr.put(it.toDouble()) } })
+                put("pdr_lat", pdrLat)
+                put("pdr_lon", pdrLon)
             }.toString()
 
             val request = Request.Builder()
