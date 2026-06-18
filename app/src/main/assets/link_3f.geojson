@@ -1,0 +1,971 @@
+{
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97023382408098,
+                        37.55427094060799
+                    ],
+                    [
+                        126.9706541845898,
+                        37.554213371865735
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030001,
+                "ENT_ND_ID": 110030032,
+                "EXT_ND_ID": 110030002,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 37.69,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.9706541845898,
+                        37.554213371865735
+                    ],
+                    [
+                        126.97101390594311,
+                        37.554264237593095
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030003,
+                "ENT_ND_ID": 110030002,
+                "EXT_ND_ID": 110030004,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 32.28,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97023382408098,
+                        37.55427094060799
+                    ],
+                    [
+                        126.97022284025277,
+                        37.55422299574216
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030005,
+                "ENT_ND_ID": 110030032,
+                "EXT_ND_ID": 110030014,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 5.41,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97022284025277,
+                        37.55422299574216
+                    ],
+                    [
+                        126.97065385772947,
+                        37.55416370263555
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030007,
+                "ENT_ND_ID": 110030014,
+                "EXT_ND_ID": 110030022,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 38.65,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.9706541845898,
+                        37.554213371865735
+                    ],
+                    [
+                        126.97065385772947,
+                        37.55416370263555
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030009,
+                "ENT_ND_ID": 110030002,
+                "EXT_ND_ID": 110030022,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 5.51,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97101390594311,
+                        37.554264237593095
+                    ],
+                    [
+                        126.97102540705407,
+                        37.55421636967017
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030011,
+                "ENT_ND_ID": 110030004,
+                "EXT_ND_ID": 110030006,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 5.41,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97065385772947,
+                        37.55416370263555
+                    ],
+                    [
+                        126.97102540705407,
+                        37.55421636967017
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030013,
+                "ENT_ND_ID": 110030022,
+                "EXT_ND_ID": 110030006,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 33.35,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97102540705407,
+                        37.55421636967017
+                    ],
+                    [
+                        126.97103690815031,
+                        37.55416850174572
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030015,
+                "ENT_ND_ID": 110030006,
+                "EXT_ND_ID": 110030008,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 5.41,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97103690815031,
+                        37.55416850174572
+                    ],
+                    [
+                        126.97065353126688,
+                        37.554114093781614
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030017,
+                "ENT_ND_ID": 110030008,
+                "EXT_ND_ID": 110030024,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 34.41,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97065353126688,
+                        37.554114093781614
+                    ],
+                    [
+                        126.97065385772947,
+                        37.55416370263555
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030019,
+                "ENT_ND_ID": 110030024,
+                "EXT_ND_ID": 110030022,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 5.51,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97022284025277,
+                        37.55422299574216
+                    ],
+                    [
+                        126.97021185643865,
+                        37.554175050874925
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030021,
+                "ENT_ND_ID": 110030014,
+                "EXT_ND_ID": 110030016,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 5.41,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97021185643865,
+                        37.554175050874925
+                    ],
+                    [
+                        126.97065353126688,
+                        37.554114093781614
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030023,
+                "ENT_ND_ID": 110030016,
+                "EXT_ND_ID": 110030024,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 39.61,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97065353126688,
+                        37.554114093781614
+                    ],
+                    [
+                        126.97065321841605,
+                        37.55406655329635
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030025,
+                "ENT_ND_ID": 110030024,
+                "EXT_ND_ID": 110030026,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 5.28,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97065321841605,
+                        37.55406655329635
+                    ],
+                    [
+                        126.97065289059881,
+                        37.55401673846889
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030027,
+                "ENT_ND_ID": 110030026,
+                "EXT_ND_ID": 110030028,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 5.53,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97065289059881,
+                        37.55401673846889
+                    ],
+                    [
+                        126.97065187033701,
+                        37.55386169995088
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030029,
+                "ENT_ND_ID": 110030028,
+                "EXT_ND_ID": 110030030,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 17.21,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97021185643865,
+                        37.554175050874925
+                    ],
+                    [
+                        126.97020087263857,
+                        37.554127106006284
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030031,
+                "ENT_ND_ID": 110030016,
+                "EXT_ND_ID": 110030018,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 5.41,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97020087263857,
+                        37.554127106006284
+                    ],
+                    [
+                        126.97065321841605,
+                        37.55406655329635
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030033,
+                "ENT_ND_ID": 110030018,
+                "EXT_ND_ID": 110030026,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 40.53,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97065321841605,
+                        37.55406655329635
+                    ],
+                    [
+                        126.9710484092318,
+                        37.55412063381978
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030035,
+                "ENT_ND_ID": 110030026,
+                "EXT_ND_ID": 110030010,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 35.43,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97103690815031,
+                        37.55416850174572
+                    ],
+                    [
+                        126.9710484092318,
+                        37.55412063381978
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030037,
+                "ENT_ND_ID": 110030008,
+                "EXT_ND_ID": 110030010,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 5.41,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.9710484092318,
+                        37.55412063381978
+                    ],
+                    [
+                        126.97105991029856,
+                        37.5540727658923
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030039,
+                "ENT_ND_ID": 110030010,
+                "EXT_ND_ID": 110030012,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 5.41,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97105991029856,
+                        37.5540727658923
+                    ],
+                    [
+                        126.97065289059881,
+                        37.55401673846889
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030041,
+                "ENT_ND_ID": 110030012,
+                "EXT_ND_ID": 110030028,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 36.5,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97065289059881,
+                        37.55401673846889
+                    ],
+                    [
+                        126.97018988885257,
+                        37.55407916113624
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030043,
+                "ENT_ND_ID": 110030028,
+                "EXT_ND_ID": 110030020,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 41.49,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        126.97018988885257,
+                        37.55407916113624
+                    ],
+                    [
+                        126.97020087263857,
+                        37.554127106006284
+                    ]
+                ]
+            },
+            "properties": {
+                "LNK_ID": 110030045,
+                "ENT_ND_ID": 110030020,
+                "EXT_ND_ID": 110030018,
+                "LNK_TP_CD": 0,
+                "LNK_LEN": 5.41,
+                "BLK_CD": "서울역",
+                "FL_CD": "3",
+                "PD_ENV_CD": 11,
+                "DIR_CD": 0,
+                "SFTYP_YN": 0,
+                "LNK_WTH": 0,
+                "MM_TP_CD": 0,
+                "MM_RNGE": 20,
+                "EX_PASS_CD": 0,
+                "GD_TP": 0,
+                "TMG_USE_YN": 0,
+                "PD_MTHD_CD": 6,
+                "PD_LVL_CD": 99,
+                "UTIL_STTM": "0000",
+                "UTIL_EDTM": "0000",
+                "ST_LINE_NO": 0,
+                "TR_SE": "",
+                "RA_SE": 0,
+                "BE_ST_NM": ""
+            }
+        }
+    ]
+}

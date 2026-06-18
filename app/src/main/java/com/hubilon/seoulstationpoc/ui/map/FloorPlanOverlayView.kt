@@ -27,7 +27,8 @@ private val FLOOR_CORNERS = listOf(
 class FloorPlanOverlayView(context: Context) : View(context) {
     private var kakaoMap: KakaoMap? = null
     private var floorBitmap: Bitmap? = null
-    private var locationLatLng: LatLng? = null          // 서버측위 (빨간)
+    private var locationLatLng: LatLng? = null          // tracker 원본 (빨간)
+    private var finalLocationLatLng: LatLng? = null     // smooth+칼만 최종 (검은)
     private var pdrServerLocationLatLng: LatLng? = null // 서버+PDR (주황)
     private var fusedLocationLatLng: LatLng? = null     // GPS (녹색)
     private var rttLocationLatLng: LatLng? = null       // RTT 측위 (보라)
@@ -76,6 +77,12 @@ class FloorPlanOverlayView(context: Context) : View(context) {
     fun updateLocation(latLng: LatLng?) {
         if (locationLatLng == latLng) return
         locationLatLng = latLng
+        invalidate()
+    }
+
+    fun updateFinalLocation(latLng: LatLng?) {
+        if (finalLocationLatLng == latLng) return
+        finalLocationLatLng = latLng
         invalidate()
     }
 
@@ -147,11 +154,18 @@ class FloorPlanOverlayView(context: Context) : View(context) {
             } catch (e: Exception) { Log.e(TAG, "FloorOverlay 서버+PDR 마커 오류: ${e.message}", e) }
         }
 
-        // 서버 마커 (빨간) — 최상위 레이어
+        // 서버 마커 (빨간) — tracker 원본
         locationLatLng?.let {
             try {
                 map.toScreenPoint(it)?.let { pt -> drawLocationMarker(canvas, pt.x.toFloat(), pt.y.toFloat()) }
             } catch (e: Exception) { Log.e(TAG, "FloorOverlay 서버 마커 오류: ${e.message}", e) }
+        }
+
+        // 최종 마커 (검은) — smooth+칼만 적용, 최상위 레이어
+        finalLocationLatLng?.let {
+            try {
+                map.toScreenPoint(it)?.let { pt -> drawFinalLocationMarker(canvas, pt.x.toFloat(), pt.y.toFloat()) }
+            } catch (e: Exception) { Log.e(TAG, "FloorOverlay 최종 마커 오류: ${e.message}", e) }
         }
     }
 
@@ -182,6 +196,16 @@ class FloorPlanOverlayView(context: Context) : View(context) {
         markerPaint.color = android.graphics.Color.argb(180, 255, 255, 255)
         canvas.drawCircle(cx, cy, r * 0.5f, markerPaint)
         markerPaint.color = android.graphics.Color.argb(180, 156, 39, 176)
+        canvas.drawCircle(cx, cy, r * 0.25f, markerPaint)
+    }
+
+    private fun drawFinalLocationMarker(canvas: Canvas, cx: Float, cy: Float) {
+        val r = markerRadius
+        markerPaint.color = android.graphics.Color.argb(200, 30, 30, 30)   // 검은 반투명
+        canvas.drawCircle(cx, cy, r, markerPaint)
+        markerPaint.color = android.graphics.Color.argb(200, 255, 255, 255)
+        canvas.drawCircle(cx, cy, r * 0.5f, markerPaint)
+        markerPaint.color = android.graphics.Color.argb(200, 30, 30, 30)
         canvas.drawCircle(cx, cy, r * 0.25f, markerPaint)
     }
 

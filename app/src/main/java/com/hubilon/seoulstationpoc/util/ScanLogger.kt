@@ -33,15 +33,15 @@ class ScanLogger(context: Context) {
     init {
         try {
             val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            rawStream     = openStream(context, "SSP_RAW_$stamp.csv")
-            predictStream = openStream(context, "SSP_PRED_$stamp.csv")
+            rawStream     = openStream(context, "SSP_${stamp}_RAW.csv")
+            predictStream = openStream(context, "SSP_${stamp}_PRED.csv")
 
             // 파일 1 헤더: 실제 스캔된 신호
             writeLine(rawStream, "카운트", "타임스탬프", "타입", "이름", "맥주소", "RSSI", "매칭")
             // 파일 2 헤더: 서버 전송 피처 (856개)
             writeLine(predictStream, "카운트", "타임스탬프", "타입", "이름", "맥주소", "값", "매칭")
 
-            Log.i(TAG, "스캔 로그 생성: SSP_RAW_$stamp.csv / SSP_PRED_$stamp.csv")
+            Log.i(TAG, "스캔 로그 생성: SSP_${stamp}_RAW.csv / SSP_${stamp}_PRED.csv")
         } catch (e: Exception) {
             Log.e(TAG, "스캔 로그 파일 생성 실패: ${e.message}", e)
         }
@@ -103,6 +103,11 @@ class ScanLogger(context: Context) {
                 (++predictRowCount).toString(), ts,
                 type, name, entry.mac, entry.rssi.toString(), matched
             )
+        }
+        for (signal in lteSignals) {
+            val id = "${signal.pci}:${signal.tac}"
+            writeLine(predictStream, (++predictRowCount).toString(), ts, "LTE_RSRP", "", id, signal.rsrp.toString(), "Y")
+            writeLine(predictStream, (++predictRowCount).toString(), ts, "LTE_RSRQ", "", id, signal.rsrq.toString(), "Y")
         }
         if (sensor != null) {
             val fmt = "%.4f"

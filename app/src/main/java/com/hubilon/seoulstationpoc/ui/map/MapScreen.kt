@@ -14,22 +14,20 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -66,6 +65,14 @@ import com.kakao.vectormap.LatLng
 import com.kakao.vectormap.MapLifeCycleCallback
 import com.kakao.vectormap.MapView
 import com.kakao.vectormap.camera.CameraUpdateFactory
+import com.kakao.vectormap.label.Label
+import com.kakao.vectormap.label.LabelOptions
+import com.kakao.vectormap.label.LabelStyle
+import com.kakao.vectormap.label.LabelStyles
+import com.kakao.vectormap.shape.MapPoints
+import com.kakao.vectormap.shape.Polyline
+import com.kakao.vectormap.shape.PolylineOptions
+import com.kakao.vectormap.shape.PolylineStyle
 
 private const val TAG = AppLog.MAP
 
@@ -83,6 +90,18 @@ fun MapScreen(
     val activity = context as Activity
 
     var showExitDialog by remember { mutableStateOf(false) }
+
+    // 자동측위 중 화면 자동잠김 방지
+    DisposableEffect(uiState.isAutoScanning) {
+        if (uiState.isAutoScanning) {
+            activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
 
     // 뒤로가기: 팝업이 열려 있으면 닫고, 아니면 자동측위 중단 후 종료 팝업 표시
     BackHandler {
@@ -128,6 +147,7 @@ fun MapScreen(
 
     val isTracking = uiState.isTracking
     val location = uiState.location
+    val finalLocation = uiState.finalLocation
     val pdrServerLocation = uiState.pdrServerLocation
     val fusedLocation = uiState.fusedLocation
     val rttLocation = uiState.rttLocation
@@ -175,6 +195,88 @@ fun MapScreen(
         }*/
     }
 
+    // 링크 테스트: 폴리라인 그리기 + 터치 리스너 관리
+    val isLinkTestEnabled = uiState.isLinkTestEnabled
+    val linkPolylines = remember { mutableListOf<Polyline>() }
+    DisposableEffect(kakaoMap, isLinkTestEnabled) {
+        val map = kakaoMap
+        if (map != null && isLinkTestEnabled) {
+            val shapeLayer = map.getShapeManager()?.getLayer()
+            val linkStyle  = PolylineStyle.from(4f, 0x990000FF.toInt())
+            viewModel.linkData.forEach { link ->
+                try {
+                    val pts = MapPoints.fromLatLng(listOf(
+                        LatLng.from(link.startPos.lat, link.startPos.lng),
+                        LatLng.from(link.endPos.lat, link.endPos.lng)
+                    ))
+                    shapeLayer?.addPolyline(PolylineOptions.from(pts, linkStyle))
+                        ?.let { linkPolylines.add(it) }
+                } catch (e: Exception) {
+                    Log.w(TAG, "링크 폴리라인 추가 실패: ${e.message}")
+                }
+            }
+            Log.i(TAG, "링크 테스트 ON — ${linkPolylines.size}개 폴리라인 생성")
+            map.setOnMapClickListener { _, latLng, _, _ ->
+                viewModel.onMapTouched(latLng.latitude, latLng.longitude)
+            }
+        }
+        onDispose {
+            val shapeLayer = map?.getShapeManager()?.getLayer()
+            linkPolylines.forEach { runCatching { shapeLayer?.remove(it) } }
+            linkPolylines.clear()
+            map?.setOnMapClickListener(null)
+            Log.i(TAG, "링크 테스트 폴리라인 제거")
+        }
+    }
+
+    // 링크 테스트: 터치 마커 + 스냅 마커 관리
+    val linkTouchPoint   = uiState.linkTouchPoint
+    val linkSnappedPoint = uiState.linkSnappedPoint
+    val touchLabelHolder   = remember { arrayOfNulls<Label>(1) }
+    val snappedLabelHolder = remember { arrayOfNulls<Label>(1) }
+    LaunchedEffect(kakaoMap, linkTouchPoint, linkSnappedPoint) {
+        val map = kakaoMap ?: return@LaunchedEffect
+        val labelManager = map.getLabelManager() ?: return@LaunchedEffect
+        val layer = labelManager.getLayer() ?: return@LaunchedEffect
+
+        if (linkTouchPoint == null) {
+            touchLabelHolder[0]?.show(false)
+            snappedLabelHolder[0]?.show(false)
+            return@LaunchedEffect
+        }
+
+        val touchLatLng   = LatLng.from(linkTouchPoint.lat, linkTouchPoint.lng)
+        val existingTouch = touchLabelHolder[0]
+        if (existingTouch != null) {
+            existingTouch.moveTo(touchLatLng)
+            existingTouch.show(true)
+        } else {
+            try {
+                val styles = labelManager.addLabelStyles(
+                    LabelStyles.from(LabelStyle.from(createCircleBitmap(0xFFE91E63.toInt(), 32))
+                        .setAnchorPoint(0.5f, 0.5f))
+                )
+                touchLabelHolder[0] = layer.addLabel(LabelOptions.from(touchLatLng).setStyles(styles))
+            } catch (e: Exception) { Log.e(TAG, "터치 마커 생성 실패: ${e.message}") }
+        }
+
+        val snapped = linkSnappedPoint ?: return@LaunchedEffect
+        val snappedLatLng    = LatLng.from(snapped.lat, snapped.lng)
+        val existingSnapped = snappedLabelHolder[0]
+        if (existingSnapped != null) {
+            existingSnapped.moveTo(snappedLatLng)
+            existingSnapped.show(true)
+        } else {
+            try {
+                val styles = labelManager.addLabelStyles(
+                    LabelStyles.from(LabelStyle.from(createCircleBitmap(0xFF4CAF50.toInt(), 32))
+                        .setAnchorPoint(0.5f, 0.5f))
+                )
+                snappedLabelHolder[0] = layer.addLabel(LabelOptions.from(snappedLatLng).setStyles(styles))
+            } catch (e: Exception) { Log.e(TAG, "스냅 마커 생성 실패: ${e.message}") }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         KakaoMapComposable(
             modifier = Modifier.fillMaxSize(),
@@ -192,6 +294,9 @@ fun MapScreen(
                 view.updateBitmap(floorBitmap)
                 view.updateLocation(
                     if (isAutoScanning) location?.let { LatLng.from(it.lat, it.lng) } else null
+                )
+                view.updateFinalLocation(
+                    if (isAutoScanning) finalLocation?.let { LatLng.from(it.lat, it.lng) } else null
                 )
                 view.updatePdrServerLocation(
                     if (isAutoScanning && isPdrEnabled) pdrServerLocation?.let { LatLng.from(it.lat, it.lng) } else null
@@ -246,9 +351,15 @@ fun MapScreen(
                 onClick = { viewModel.toggleKalman() },
                 isActive = uiState.isKalmanEnabled
             )
+            MapIconButton(
+                painter = painterResource(R.drawable.icon_link_matching),
+                contentDescription = "링크 테스트",
+                onClick = { viewModel.toggleLinkTest() },
+                isActive = uiState.isLinkTestEnabled
+            )
         }
 
-        // 우상단: 수집주기 선택 + 층 선택
+        // 우상단: 칼만 파라미터 설정 + 수집주기 선택 + 층 선택
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -257,14 +368,69 @@ fun MapScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IntervalSelectionButton(
-                selectedIntervalMs = uiState.scanIntervalMs,
-                enabled = !uiState.isAutoScanning,
-                onIntervalSelected = { viewModel.setScanInterval(it) }
+            KalmanParamButton(
+                label = "S",
+                value = "%.1f".format(uiState.trackerSmoothStep),
+                onClick = { viewModel.showTrackerSmoothDialog() }
+            )
+            KalmanParamButton(
+                label = "M",
+                value = "%.0f".format(uiState.kalmanMeasurementNoise),
+                onClick = { viewModel.showKalmanMeasurementDialog() }
+            )
+            KalmanParamButton(
+                label = "P",
+                value = "%.1f".format(uiState.kalmanProcessNoise),
+                onClick = { viewModel.showKalmanProcessDialog() }
             )
             FloorSelectionDropdown(
                 selectedFloor = uiState.selectedFloor,
                 onFloorSelected = { viewModel.setFloor(it) }
+            )
+        }
+
+        // 트래커 스무딩 step 설정 다이얼로그
+        if (uiState.showTrackerSmoothDialog) {
+            KalmanParamDialog(
+                title = "스무딩 이동거리 (S)",
+                description = "trackerSmoothStep (m)",
+                hint = "▲ 올리면: 한 번에 더 많이 이동 → 응답성 향상\n▼ 내리면: 한 번에 조금씩 이동 → 부드러운 이동",
+                currentValue = (uiState.trackerSmoothStep * 2).toFloat(),
+                valueRange = 2f..10f,
+                steps = 7,
+                formatValue = { "%.1f".format(it / 2f) },
+                onConfirm = { viewModel.setTrackerSmoothStep(it / 2.0) },
+                onDismiss = { viewModel.dismissTrackerSmoothDialog() }
+            )
+        }
+
+        // 칼만 측정노이즈 설정 다이얼로그
+        if (uiState.showKalmanMeasurementDialog) {
+            KalmanParamDialog(
+                title = "측정 노이즈 (M)",
+                description = "measurementNoiseSigma",
+                hint = "▲ 올리면: 측위를 덜 신뢰 → 스무딩 강화\n▼ 내리면: 측위를 더 신뢰 → 즉각 반응",
+                currentValue = uiState.kalmanMeasurementNoise.toFloat(),
+                valueRange = 1f..50f,
+                steps = 48,
+                formatValue = { "%.0f".format(it) },
+                onConfirm = { viewModel.setKalmanMeasurementNoise(it.toDouble()) },
+                onDismiss = { viewModel.dismissKalmanDialogs() }
+            )
+        }
+
+        // 칼만 프로세스노이즈 설정 다이얼로그
+        if (uiState.showKalmanProcessDialog) {
+            KalmanParamDialog(
+                title = "프로세스 노이즈 (P)",
+                description = "processNoiseSigma",
+                hint = "▲ 올리면: 빠른 움직임 가정 → 즉각 반응\n▼ 내리면: 느린 움직임 가정 → 스무딩 강화",
+                currentValue = (uiState.kalmanProcessNoise * 10).toFloat(),
+                valueRange = 1f..100f,
+                steps = 98,
+                formatValue = { "%.1f".format(it / 10f) },
+                onConfirm = { viewModel.setKalmanProcessNoise((it / 10.0)) },
+                onDismiss = { viewModel.dismissKalmanDialogs() }
             )
         }
 
@@ -274,7 +440,7 @@ fun MapScreen(
         val matchCount = fingerprintEntries?.count { it.rssi != MISSING_RSSI } ?: 0
         val hasBottom = uiState.isAutoScanning &&
                 (fingerprintEntries != null || errorMessage != null ||
-                 location != null || pdrServerLocation != null ||
+                 location != null || finalLocation != null || pdrServerLocation != null ||
                  fusedLocation != null || rttLocation != null)
 
         if (hasBottom) {
@@ -322,6 +488,13 @@ fun MapScreen(
                                 text = "● 서버+PDR: %.6f, %.6f".format(pdrServerLocation.lat, pdrServerLocation.lng),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFFF57C00)
+                            )
+                        }
+                        if (finalLocation != null) {
+                            Text(
+                                text = "● 최종: %.6f, %.6f".format(finalLocation.lat, finalLocation.lng),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                         if (fusedLocation != null) {
@@ -640,58 +813,6 @@ private fun StatChip(label: String, value: String) {
 }
 
 @Composable
-private fun IntervalSelectionButton(
-    selectedIntervalMs: Long,
-    enabled: Boolean,
-    onIntervalSelected: (Long) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    val label = when (selectedIntervalMs) {
-        1_000L -> "1초"
-        2_000L -> "2초"
-        3_000L -> "3초"
-        else   -> "${selectedIntervalMs / 1000}초"
-    }
-    val surfaceColor = if (enabled)
-        MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
-    else
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
-    val textColor = if (enabled)
-        MaterialTheme.colorScheme.onSurface
-    else
-        MaterialTheme.colorScheme.onSurfaceVariant
-
-    Box(modifier = modifier) {
-        Surface(
-            shape = MaterialTheme.shapes.small,
-            color = surfaceColor,
-            shadowElevation = 4.dp,
-            modifier = Modifier.clickable(enabled = enabled) { expanded = true }
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(text = label, style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium, color = textColor)
-                Text(text = "▾", style = MaterialTheme.typography.bodyMedium, color = textColor)
-            }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            listOf(1_000L to "1초", 2_000L to "2초", 3_000L to "3초").forEach { (ms, lbl) ->
-                DropdownMenuItem(
-                    text = { Text(lbl) },
-                    onClick = { onIntervalSelected(ms); expanded = false }
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun FloorSelectionDropdown(
     selectedFloor: FloorSelection,
     onFloorSelected: (FloorSelection) -> Unit,
@@ -738,4 +859,103 @@ private fun FloorSelectionDropdown(
                 }
         }
     }
+}
+
+@Composable
+private fun KalmanParamButton(
+    label: String,
+    value: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier
+            .height(36.dp)
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(label, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer)
+            Text(value, style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer)
+        }
+    }
+}
+
+private fun createCircleBitmap(color: Int, sizeDp: Int): Bitmap {
+    val size = (sizeDp * android.content.res.Resources.getSystem().displayMetrics.density).toInt()
+    val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bmp)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color }
+    val r = size / 2f
+    canvas.drawCircle(r, r, r, paint)
+    paint.color = android.graphics.Color.WHITE
+    canvas.drawCircle(r, r, r * 0.45f, paint)
+    return bmp
+}
+
+@Composable
+private fun KalmanParamDialog(
+    title: String,
+    description: String,
+    hint: String = "",
+    currentValue: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    formatValue: (Float) -> String,
+    onConfirm: (Float) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var sliderValue by remember { mutableFloatStateOf(currentValue) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(description, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    formatValue(sliderValue),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Slider(
+                    value = sliderValue,
+                    onValueChange = { sliderValue = it },
+                    valueRange = valueRange,
+                    steps = steps,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(formatValue(valueRange.start), style = MaterialTheme.typography.labelSmall)
+                    Text(formatValue(valueRange.endInclusive), style = MaterialTheme.typography.labelSmall)
+                }
+                if (hint.isNotEmpty()) {
+                    Text(
+                        hint,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.4f
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(sliderValue) }) { Text("적용") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("취소") }
+        }
+    )
 }

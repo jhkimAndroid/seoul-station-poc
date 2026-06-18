@@ -22,8 +22,8 @@ class AppLogger(context: Context) {
     init {
         try {
             val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            stream = openStream(context, "SSP_APP_$stamp.log")
-            Log.i(TAG, "앱 로그 생성: SSP_APP_$stamp.log")
+            stream = openStream(context, "SSP_${stamp}_LOG")
+            Log.i(TAG, "앱 로그 생성: SSP_${stamp}_LOG")
         } catch (e: Exception) {
             Log.e(TAG, "앱 로그 파일 생성 실패: ${e.message}", e)
         }
