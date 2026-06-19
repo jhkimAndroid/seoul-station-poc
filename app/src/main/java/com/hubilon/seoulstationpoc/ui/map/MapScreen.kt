@@ -407,6 +407,10 @@ fun MapScreen(
                 view.updateFinalLocation(
                     if (isAutoScanning) finalLocation?.let { LatLng.from(it.lat, it.lng) } else null
                 )
+                // 이동경로 화살표: 테스트 마커 ON일 때만 표시
+                view.updateLocationHistory(
+                    if (isAutoScanning && isTestMarkerEnabled) uiState.locationHistory else emptyList()
+                )
             }
         )
 

@@ -583,7 +583,7 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
         appLogger.close()
     }
 
-    // Step 6: 최종좌표 이력 갱신 — 이전 좌표와 0.1m 이상 차이날 때만 추가, 최대 10개 유지
+    // Step 6: 최종좌표 이력 갱신 — 이전 좌표와 1.0m 이상 차이날 때만 추가, 최대 10개 유지
     private fun updateLocationHistory(history: List<GeoPos>, newPos: GeoPos): List<GeoPos> {
         val last = history.lastOrNull()
         if (last != null && geoDistanceM(last.lat, last.lng, newPos.lat, newPos.lng) < LOCATION_HISTORY_MIN_DIST_M) {

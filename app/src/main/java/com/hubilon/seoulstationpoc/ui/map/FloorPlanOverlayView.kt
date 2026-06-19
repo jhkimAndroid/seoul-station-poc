@@ -3,14 +3,19 @@ package com.hubilon.seoulstationpoc.ui.map
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.util.Log
 import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
+import com.hubilon.seoulstationpoc.model.GeoPos
 import com.hubilon.seoulstationpoc.util.AppLog
 import com.kakao.vectormap.KakaoMap
 import com.kakao.vectormap.LatLng
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 
 private const val TAG = AppLog.MAP
 
@@ -31,12 +36,27 @@ class FloorPlanOverlayView(context: Context) : View(context) {
     private var kalmanFilteredLocationLatLng: LatLng? = null // 칼만필터 (보라)
     private var pdrLocationLatLng: LatLng? = null            // PDR 위치 (노란)
     private var finalLocationLatLng: LatLng? = null          // 최종 위치 (빨간)
+    private var locationHistory: List<GeoPos> = emptyList()  // 이동경로 좌표 이력
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
         alpha = 200
     }
     private val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val markerRadius = 15f * context.resources.displayMetrics.density
+    private val dp = context.resources.displayMetrics.density
+    private val pathPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.argb(200, 255, 140, 0)  // 주황
+        strokeWidth = 3f * dp
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val arrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.argb(220, 255, 140, 0)  // 주황
+        style = Paint.Style.FILL
+    }
+    private val arrowPath = Path()
+    private val arrowSize = 12f * dp
 
     private var cameraMoving = false
     private val frameCallback = object : Choreographer.FrameCallback {
@@ -102,6 +122,11 @@ class FloorPlanOverlayView(context: Context) : View(context) {
         invalidate()
     }
 
+    fun updateLocationHistory(history: List<GeoPos>) {
+        locationHistory = history
+        invalidate()
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val map = kakaoMap ?: return
@@ -127,6 +152,27 @@ class FloorPlanOverlayView(context: Context) : View(context) {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "FloorOverlay 평면도 오류: ${e.message}", e)
+            }
+        }
+
+        // 이동경로 화살표 — 마커 아래 레이어
+        if (locationHistory.size >= 2) {
+            try {
+                val pts = locationHistory.mapNotNull { geo ->
+                    map.toScreenPoint(LatLng.from(geo.lat, geo.lng))
+                }
+                if (pts.size >= 2) {
+                    for (i in 0 until pts.size - 1) {
+                        val x1 = pts[i].x.toFloat()
+                        val y1 = pts[i].y.toFloat()
+                        val x2 = pts[i + 1].x.toFloat()
+                        val y2 = pts[i + 1].y.toFloat()
+                        canvas.drawLine(x1, y1, x2, y2, pathPaint)
+                        drawArrowHead(canvas, x1, y1, x2, y2)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "FloorOverlay 경로 화살표 오류: ${e.message}", e)
             }
         }
 
@@ -214,6 +260,20 @@ class FloorPlanOverlayView(context: Context) : View(context) {
         canvas.drawCircle(cx, cy, r * 0.5f, markerPaint)
         markerPaint.color = android.graphics.Color.argb(220, 233, 50, 43)
         canvas.drawCircle(cx, cy, r * 0.25f, markerPaint)
+    }
+
+    private fun drawArrowHead(canvas: Canvas, x1: Float, y1: Float, x2: Float, y2: Float) {
+        val angle = atan2((y2 - y1).toDouble(), (x2 - x1).toDouble())
+        val ax = arrowSize * cos(angle - Math.PI / 6).toFloat()
+        val ay = arrowSize * sin(angle - Math.PI / 6).toFloat()
+        val bx = arrowSize * cos(angle + Math.PI / 6).toFloat()
+        val by = arrowSize * sin(angle + Math.PI / 6).toFloat()
+        arrowPath.reset()
+        arrowPath.moveTo(x2, y2)
+        arrowPath.lineTo(x2 - ax, y2 - ay)
+        arrowPath.lineTo(x2 - bx, y2 - by)
+        arrowPath.close()
+        canvas.drawPath(arrowPath, arrowPaint)
     }
 
     override fun onDetachedFromWindow() {
