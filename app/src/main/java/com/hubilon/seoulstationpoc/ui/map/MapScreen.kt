@@ -1,13 +1,22 @@
 package com.hubilon.seoulstationpoc.ui.map
 
 import android.app.Activity
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import android.content.Context
+import android.content.Intent
 import android.content.res.Resources
+import android.net.wifi.WifiManager
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,6 +51,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -88,12 +98,42 @@ fun MapScreen(
     var kakaoMap by remember { mutableStateOf<KakaoMap?>(null) }
     val context = LocalContext.current
     val activity = context as Activity
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     var showExitDialog by remember { mutableStateOf(false) }
+    var showWifiDialog by remember { mutableStateOf(false) }
+    var showBluetoothDialog by remember { mutableStateOf(false) }
+    val wifiManager = remember { context.getSystemService(Context.WIFI_SERVICE) as WifiManager }
+    val bluetoothAdapter = remember {
+        (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+    }
+
+    // 블루투스 자동 켜기 — 시스템 팝업으로 요청, 거부 시 설정 팝업으로 대체
+    val bluetoothEnableLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (bluetoothAdapter?.isEnabled == false) showBluetoothDialog = true
+    }
+
+    // ON_RESUME마다 WiFi/블루투스 상태 재확인 (설정에서 돌아왔을 때 포함)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                when {
+                    !wifiManager.isWifiEnabled ->
+                        showWifiDialog = true
+                    bluetoothAdapter?.isEnabled == false && !showBluetoothDialog ->
+                        bluetoothEnableLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     // 자동측위 중 화면 자동잠김 방지
-    DisposableEffect(uiState.isAutoScanning) {
-        if (uiState.isAutoScanning) {
+    DisposableEffect(uiState.isAutoPositioning) {
+        if (uiState.isAutoPositioning) {
             activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         } else {
             activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -108,7 +148,7 @@ fun MapScreen(
         if (showExitDialog) {
             showExitDialog = false
         } else {
-            if (uiState.isAutoScanning) viewModel.toggleAutoScan()
+            if (uiState.isAutoPositioning) viewModel.toggleAutoScan()
             showExitDialog = true
         }
     }
@@ -131,6 +171,47 @@ fun MapScreen(
         )
     }
 
+    if (showWifiDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showWifiDialog = false
+                if (bluetoothAdapter?.isEnabled == false) showBluetoothDialog = true
+            },
+            title = { Text("WiFi 꺼짐") },
+            text  = { Text("WiFi가 꺼져있습니다.\n위치 측위를 위해 WiFi를 켜주세요.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showWifiDialog = false
+                    if (bluetoothAdapter?.isEnabled == false) showBluetoothDialog = true
+                    context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+                }) { Text("설정") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showWifiDialog = false
+                    if (bluetoothAdapter?.isEnabled == false) showBluetoothDialog = true
+                }) { Text("취소") }
+            }
+        )
+    }
+
+    if (showBluetoothDialog) {
+        AlertDialog(
+            onDismissRequest = { showBluetoothDialog = false },
+            title = { Text("블루투스 꺼짐") },
+            text  = { Text("블루투스가 꺼져있습니다.\n위치 측위를 위해 블루투스를 켜주세요.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBluetoothDialog = false
+                    context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                }) { Text("설정") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBluetoothDialog = false }) { Text("취소") }
+            }
+        )
+    }
+
     val f2Bitmap = remember {
         decodeSampledBitmap(context.resources, R.drawable.img_1105001001_2f, 2048, 2048)
             .also { Log.d(TAG, "f2Bitmap: ${if (it != null) "${it.width}x${it.height}" else "null — 리소스 로드 실패"}") }
@@ -146,11 +227,11 @@ fun MapScreen(
     }
 
     val isTracking = uiState.isTracking
-    val location = uiState.location
+    val serverLocation = uiState.serverLocation
+    val kalmanFilteredLocation = uiState.kalmanFilteredLocation
     val finalLocation = uiState.finalLocation
-    val pdrServerLocation = uiState.pdrServerLocation
+    val pdrLocation = uiState.pdrLocation
     val fusedLocation = uiState.fusedLocation
-    val rttLocation = uiState.rttLocation
     val locationUpdateCount = uiState.locationUpdateCount
 
     // 네이티브 마커 홀더 (맵 인스턴스가 바뀌면 참조 무효화)
@@ -160,7 +241,7 @@ fun MapScreen(
     // isTracking: 추적 ON 전환 시 현재 위치로 즉시 이동
     LaunchedEffect(locationUpdateCount, kakaoMap, isTracking) {
         val map = kakaoMap ?: return@LaunchedEffect
-        val loc = location ?: return@LaunchedEffect
+        val loc = finalLocation ?: serverLocation ?: return@LaunchedEffect
         val latLng = LatLng.from(loc.lat, loc.lng)
 
         if (isTracking) {
@@ -195,8 +276,8 @@ fun MapScreen(
         }*/
     }
 
-    // 링크 테스트: 폴리라인 그리기 + 터치 리스너 관리
-    val isLinkTestEnabled = uiState.isLinkTestEnabled
+    // 링크 폴리라인 표시/숨김
+    val isLinkTestEnabled = uiState.isLinkEnabled
     val linkPolylines = remember { mutableListOf<Polyline>() }
     DisposableEffect(kakaoMap, isLinkTestEnabled) {
         val map = kakaoMap
@@ -215,17 +296,31 @@ fun MapScreen(
                     Log.w(TAG, "링크 폴리라인 추가 실패: ${e.message}")
                 }
             }
-            Log.i(TAG, "링크 테스트 ON — ${linkPolylines.size}개 폴리라인 생성")
-            map.setOnMapClickListener { _, latLng, _, _ ->
-                viewModel.onMapTouched(latLng.latitude, latLng.longitude)
-            }
+            Log.i(TAG, "링크 폴리라인 ON — ${linkPolylines.size}개 생성")
         }
         onDispose {
             val shapeLayer = map?.getShapeManager()?.getLayer()
             linkPolylines.forEach { runCatching { shapeLayer?.remove(it) } }
             linkPolylines.clear()
-            map?.setOnMapClickListener(null)
-            Log.i(TAG, "링크 테스트 폴리라인 제거")
+            Log.i(TAG, "링크 폴리라인 제거")
+        }
+    }
+
+    // 링크 스냅: 터치 클릭 리스너 관리
+    val isLinkSnapEnabled = uiState.isLinkMatchingEnabled
+    DisposableEffect(kakaoMap, isLinkSnapEnabled) {
+        val map = kakaoMap
+        if (map != null && isLinkSnapEnabled) {
+            map.setOnMapClickListener { _, latLng, _, _ ->
+                viewModel.onMapTouched(latLng.latitude, latLng.longitude)
+            }
+            Log.i(TAG, "링크 스냅 ON")
+        }
+        onDispose {
+            if (!isLinkSnapEnabled) {
+                map?.setOnMapClickListener(null)
+                Log.i(TAG, "링크 스냅 OFF")
+            }
         }
     }
 
@@ -234,14 +329,16 @@ fun MapScreen(
     val linkSnappedPoint = uiState.linkSnappedPoint
     val touchLabelHolder   = remember { arrayOfNulls<Label>(1) }
     val snappedLabelHolder = remember { arrayOfNulls<Label>(1) }
-    LaunchedEffect(kakaoMap, linkTouchPoint, linkSnappedPoint) {
+    LaunchedEffect(kakaoMap, isLinkSnapEnabled, linkTouchPoint, linkSnappedPoint) {
         val map = kakaoMap ?: return@LaunchedEffect
         val labelManager = map.getLabelManager() ?: return@LaunchedEffect
         val layer = labelManager.getLayer() ?: return@LaunchedEffect
 
-        if (linkTouchPoint == null) {
-            touchLabelHolder[0]?.show(false)
-            snappedLabelHolder[0]?.show(false)
+        if (!isLinkSnapEnabled || linkTouchPoint == null) {
+            touchLabelHolder[0]?.let { runCatching { layer.remove(it) } }
+            touchLabelHolder[0] = null
+            snappedLabelHolder[0]?.let { runCatching { layer.remove(it) } }
+            snappedLabelHolder[0] = null
             return@LaunchedEffect
         }
 
@@ -284,28 +381,31 @@ fun MapScreen(
         )
 
         // 층 평면도 오버레이 + 위치 마커 (마커는 평면도 위에 그림)
-        val isAutoScanning = uiState.isAutoScanning
-        val isPdrEnabled   = uiState.isPdrEnabled
+        val isAutoScanning      = uiState.isAutoPositioning
+        val isTestMarkerEnabled = uiState.isTestMarkerEnabled
+        val isPdrEnabled        = uiState.isPdrEnabled
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { FloorPlanOverlayView(it) },
             update = { view ->
                 view.updateMap(kakaoMap)
                 view.updateBitmap(floorBitmap)
-                view.updateLocation(
-                    if (isAutoScanning) location?.let { LatLng.from(it.lat, it.lng) } else null
+                // 테스트 마커: GPS·서버·칼만·PDR — 테스트 마커 버튼 ON일 때만 표시
+                view.updateServerLocation(
+                    if (isAutoScanning && isTestMarkerEnabled) serverLocation?.let { LatLng.from(it.lat, it.lng) } else null
                 )
-                view.updateFinalLocation(
-                    if (isAutoScanning) finalLocation?.let { LatLng.from(it.lat, it.lng) } else null
+                view.updateKalmanFilteredLocation(
+                    if (isAutoScanning && isTestMarkerEnabled) kalmanFilteredLocation?.let { LatLng.from(it.lat, it.lng) } else null
                 )
-                view.updatePdrServerLocation(
-                    if (isAutoScanning && isPdrEnabled) pdrServerLocation?.let { LatLng.from(it.lat, it.lng) } else null
+                view.updatePdrLocation(
+                    if (isAutoScanning && isTestMarkerEnabled && isPdrEnabled) pdrLocation?.let { LatLng.from(it.lat, it.lng) } else null
                 )
                 view.updateFusedLocation(
-                    if (isAutoScanning) fusedLocation?.let { LatLng.from(it.lat, it.lng) } else null
+                    if (isAutoScanning && isTestMarkerEnabled) fusedLocation?.let { LatLng.from(it.lat, it.lng) } else null
                 )
-                view.updateRttLocation(
-                    if (isAutoScanning) rttLocation?.let { LatLng.from(it.lat, it.lng) } else null
+                // 최종 마커: 자동측위 ON/OFF에만 연동
+                view.updateFinalLocation(
+                    if (isAutoScanning) finalLocation?.let { LatLng.from(it.lat, it.lng) } else null
                 )
             }
         )
@@ -343,19 +443,25 @@ fun MapScreen(
                 painter = painterResource(R.drawable.icon_location),
                 contentDescription = "서버측위",
                 onClick = { viewModel.toggleAutoScan() },
-                isActive = uiState.isAutoScanning
+                isActive = uiState.isAutoPositioning
             )
             MapIconButton(
-                painter = painterResource(R.drawable.icon_filter),
-                contentDescription = "칼만필터 토글",
-                onClick = { viewModel.toggleKalman() },
-                isActive = uiState.isKalmanEnabled
+                painter = painterResource(R.drawable.icon_test_marker),
+                contentDescription = "테스트 마커",
+                onClick = { viewModel.toggleTestMarker() },
+                isActive = uiState.isTestMarkerEnabled
+            )
+            MapIconButton(
+                painter = painterResource(R.drawable.icon_link),
+                contentDescription = "링크 표시",
+                onClick = { viewModel.toggleLink() },
+                isActive = uiState.isLinkEnabled
             )
             MapIconButton(
                 painter = painterResource(R.drawable.icon_link_matching),
-                contentDescription = "링크 테스트",
-                onClick = { viewModel.toggleLinkTest() },
-                isActive = uiState.isLinkTestEnabled
+                contentDescription = "링크 매칭",
+                onClick = { viewModel.toggleLinkMatching() },
+                isActive = uiState.isLinkMatchingEnabled
             )
         }
 
@@ -368,11 +474,6 @@ fun MapScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            KalmanParamButton(
-                label = "S",
-                value = "%.1f".format(uiState.trackerSmoothStep),
-                onClick = { viewModel.showTrackerSmoothDialog() }
-            )
             KalmanParamButton(
                 label = "M",
                 value = "%.0f".format(uiState.kalmanMeasurementNoise),
@@ -389,21 +490,6 @@ fun MapScreen(
             )
         }
 
-        // 트래커 스무딩 step 설정 다이얼로그
-        if (uiState.showTrackerSmoothDialog) {
-            KalmanParamDialog(
-                title = "스무딩 이동거리 (S)",
-                description = "trackerSmoothStep (m)",
-                hint = "▲ 올리면: 한 번에 더 많이 이동 → 응답성 향상\n▼ 내리면: 한 번에 조금씩 이동 → 부드러운 이동",
-                currentValue = (uiState.trackerSmoothStep * 2).toFloat(),
-                valueRange = 2f..10f,
-                steps = 7,
-                formatValue = { "%.1f".format(it / 2f) },
-                onConfirm = { viewModel.setTrackerSmoothStep(it / 2.0) },
-                onDismiss = { viewModel.dismissTrackerSmoothDialog() }
-            )
-        }
-
         // 칼만 측정노이즈 설정 다이얼로그
         if (uiState.showKalmanMeasurementDialog) {
             KalmanParamDialog(
@@ -411,8 +497,8 @@ fun MapScreen(
                 description = "measurementNoiseSigma",
                 hint = "▲ 올리면: 측위를 덜 신뢰 → 스무딩 강화\n▼ 내리면: 측위를 더 신뢰 → 즉각 반응",
                 currentValue = uiState.kalmanMeasurementNoise.toFloat(),
-                valueRange = 1f..50f,
-                steps = 48,
+                valueRange = 1f..20f,
+                steps = 18,
                 formatValue = { "%.0f".format(it) },
                 onConfirm = { viewModel.setKalmanMeasurementNoise(it.toDouble()) },
                 onDismiss = { viewModel.dismissKalmanDialogs() }
@@ -426,22 +512,46 @@ fun MapScreen(
                 description = "processNoiseSigma",
                 hint = "▲ 올리면: 빠른 움직임 가정 → 즉각 반응\n▼ 내리면: 느린 움직임 가정 → 스무딩 강화",
                 currentValue = (uiState.kalmanProcessNoise * 10).toFloat(),
-                valueRange = 1f..100f,
-                steps = 98,
+                valueRange = 1f..20f,
+                steps = 18,
                 formatValue = { "%.1f".format(it / 10f) },
                 onConfirm = { viewModel.setKalmanProcessNoise((it / 10.0)) },
                 onDismiss = { viewModel.dismissKalmanDialogs() }
             )
         }
 
-        // 하단: 자동측위 ON일 때만 표시
+        // 우측 하단: 마커 범례 — 테스트 마커 ON일 때만 표시
+        if (isTestMarkerEnabled) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 8.dp, bottom = 12.dp),
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+                shadowElevation = 2.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    MarkerLegendItem(color = Color(0xFF388E3C), label = "GPS")
+                    MarkerLegendItem(color = Color(0xFF2196F3), label = "서버")
+                    MarkerLegendItem(color = Color(0xFF673AB7), label = "칼만")
+                    MarkerLegendItem(color = Color(0xFFF9A825), label = "PDR")
+                    MarkerLegendItem(color = Color(0xFFE93228), label = "최종")
+                }
+            }
+        }
+
+        // 하단 중앙: 자동측위 ON일 때만 표시
         val errorMessage = uiState.errorMessage
         val fingerprintEntries = uiState.fingerprintEntries
         val matchCount = fingerprintEntries?.count { it.rssi != MISSING_RSSI } ?: 0
-        val hasBottom = uiState.isAutoScanning &&
-                (fingerprintEntries != null || errorMessage != null ||
-                 location != null || finalLocation != null || pdrServerLocation != null ||
-                 fusedLocation != null || rttLocation != null)
+        val hasBottom = uiState.isAutoPositioning &&
+                (fingerprintEntries != null || errorMessage != null || finalLocation != null ||
+                 (isTestMarkerEnabled && (serverLocation != null || kalmanFilteredLocation != null ||
+                  pdrLocation != null || fusedLocation != null)))
 
         if (hasBottom) {
             Surface(
@@ -457,7 +567,6 @@ fun MapScreen(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // 스캔 통계 칩 (스캔 이력 있을 때)
                     if (fingerprintEntries != null) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -468,7 +577,6 @@ fun MapScreen(
                             StatChip(label = "매칭", value = "$matchCount / ${fingerprintEntries.size}")
                         }
                     }
-                    // 오류 또는 위치 정보
                     if (errorMessage != null) {
                         Text(
                             text = errorMessage,
@@ -476,45 +584,64 @@ fun MapScreen(
                             color = MaterialTheme.colorScheme.error
                         )
                     } else {
-                        if (location != null) {
+                        if (isTestMarkerEnabled && serverLocation != null) {
                             Text(
-                                text = "● 서버: %.6f, %.6f".format(location.lat, location.lng),
+                                text = "● 서버: %.6f, %.6f".format(serverLocation.lat, serverLocation.lng),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFE93228)
+                                color = Color(0xFF2196F3)
                             )
                         }
-                        if (pdrServerLocation != null) {
+                        if (isTestMarkerEnabled && kalmanFilteredLocation != null) {
                             Text(
-                                text = "● 서버+PDR: %.6f, %.6f".format(pdrServerLocation.lat, pdrServerLocation.lng),
+                                text = "● 칼만: %.6f, %.6f".format(kalmanFilteredLocation.lat, kalmanFilteredLocation.lng),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFF57C00)
+                                color = Color(0xFF673AB7)
+                            )
+                        }
+                        if (isTestMarkerEnabled && pdrLocation != null) {
+                            Text(
+                                text = "● PDR: %.6f, %.6f".format(pdrLocation.lat, pdrLocation.lng),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFF9A825)
                             )
                         }
                         if (finalLocation != null) {
                             Text(
                                 text = "● 최종: %.6f, %.6f".format(finalLocation.lat, finalLocation.lng),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = Color(0xFFE93228)
                             )
                         }
-                        if (fusedLocation != null) {
+                        if (isTestMarkerEnabled && fusedLocation != null) {
                             Text(
                                 text = "● GPS: %.6f, %.6f".format(fusedLocation.lat, fusedLocation.lng),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFF388E3C)
                             )
                         }
-                        if (rttLocation != null) {
-                            Text(
-                                text = "● RTT: %.6f, %.6f".format(rttLocation.lat, rttLocation.lng),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF9C27B0)
-                            )
-                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MarkerLegendItem(color: Color, label: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .background(color, CircleShape)
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
