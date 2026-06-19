@@ -149,6 +149,7 @@ fun MapScreen(
             showExitDialog = false
         } else {
             if (uiState.isAutoPositioning) viewModel.toggleAutoScan()
+            viewModel.resetMapToggles()
             showExitDialog = true
         }
     }

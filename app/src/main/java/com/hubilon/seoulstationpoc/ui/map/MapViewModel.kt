@@ -62,7 +62,7 @@ private const val TAG = AppLog.VM
 private const val ANCHOR_INTERVAL_MS          = 30_000L
 private const val SCAN_INTERVAL_MS            = 1_000L
 private const val LOCATION_HISTORY_MIN_DIST_M = 1.0
-private const val LOCATION_HISTORY_MAX_SIZE   = 10
+private const val LOCATION_HISTORY_MAX_SIZE   = 20
 private const val SMOOTH_THRESHOLD_M          = 10.0  // 스무딩 발동 거리 기준
 private const val SMOOTH_STEP_M               = 2.0   // 1회 이동 거리
 private const val SMOOTH_OVERRIDE_COUNT       = 3     // 초과 시 서버좌표 직접 사용
@@ -158,6 +158,16 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleTestMarker() {
         _uiState.update { it.copy(isTestMarkerEnabled = !it.isTestMarkerEnabled) }
+    }
+
+    fun resetMapToggles() {
+        _uiState.update { it.copy(
+            isTracking          = false,
+            isTestMarkerEnabled = false,
+            isLinkMatchingEnabled = false,
+            linkTouchPoint      = null,
+            linkSnappedPoint    = null
+        )}
     }
 
     fun toggleLink() {
