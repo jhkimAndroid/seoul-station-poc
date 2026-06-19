@@ -6,6 +6,10 @@ import com.hubilon.seoulstationpoc.util.AppLog
 import com.kakao.vectormap.KakaoMapSdk
 
 class SeoulStationPocApplication : Application() {
+    companion object {
+        const val IS_TEST = !true
+    }
+
     override fun onCreate() {
         super.onCreate()
         Log.i(AppLog.APP, "앱 초기화 시작")

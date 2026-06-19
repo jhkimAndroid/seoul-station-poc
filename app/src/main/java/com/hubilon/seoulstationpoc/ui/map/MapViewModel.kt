@@ -6,6 +6,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.hubilon.seoulstationpoc.SeoulStationPocApplication
 import com.hubilon.seoulstationpoc.data.api.LocationApiClient
 import com.hubilon.seoulstationpoc.data.ble.BleScanner
 import com.hubilon.seoulstationpoc.data.filter.LocationKalmanFilter
@@ -93,8 +94,8 @@ data class MapUiState(
     val selectedFloor: FloorSelection = FloorSelection.F3,
     val fingerprintEntries: List<FingerprintEntry>? = null,
     val apLoadState: ApLoadState = ApLoadState.Loading,
-    val isTestMarkerEnabled: Boolean = false, // 테스트 마커 (GPS·서버·칼만·PDR)
-    val isLinkEnabled: Boolean = true,  // 링크 폴리라인 표시
+    val isTestMarkerEnabled: Boolean = SeoulStationPocApplication.IS_TEST, // 테스트 마커 (GPS·서버·칼만·PDR)
+    val isLinkEnabled: Boolean = SeoulStationPocApplication.IS_TEST,  // 링크 폴리라인 표시
     val isLinkMatchingEnabled: Boolean = false,  // 터치 스냅 마커
     val linkTouchPoint: GeoPos? = null,
     val linkSnappedPoint: GeoPos? = null,
@@ -473,7 +474,9 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
 
             if (prevFinalGeo == null) {
                 // ── 첫 앵커: 즉시 스냅 + PDR 기준점 설정 ──
-                Toast.makeText(getApplication(), "앵커 첫 측위 완료", Toast.LENGTH_SHORT).show()
+                if(SeoulStationPocApplication.IS_TEST)
+                    Toast.makeText(getApplication(), "앵커 첫 측위 완료", Toast.LENGTH_SHORT).show()
+
                 val ctx = ProcessContext(
                     previousFinal   = anchorGeo,
                     sourceType      = LocationSourceType.ANCHOR,
@@ -535,7 +538,10 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                     Log.i(TAG, "[앵커] 역방향 — diff=${"%.1f".format(diffDeg)}° 보폭=0.45m")
                 }
 
-                Toast.makeText(getApplication(), "앵커 측위 — $directionLabel", Toast.LENGTH_SHORT).show()
+                val toastMsg = if (directionLabel != null) "앵커 측위 — $directionLabel" else "앵커 측위 완료"
+                if(SeoulStationPocApplication.IS_TEST)
+                    Toast.makeText(getApplication(), toastMsg, Toast.LENGTH_SHORT).show()
+
                 _uiState.update { it.copy(anchorDirectionLabel = directionLabel) }
             }
         } catch (e: CancellationException) {

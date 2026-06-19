@@ -6,16 +6,16 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Resources
-import android.net.wifi.WifiManager
-import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.net.wifi.WifiManager
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -51,7 +52,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -66,6 +66,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hubilon.seoulstationpoc.R
+import com.hubilon.seoulstationpoc.SeoulStationPocApplication
 import com.hubilon.seoulstationpoc.data.fingerprint.MISSING_RSSI
 import com.hubilon.seoulstationpoc.util.AppLog
 import com.kakao.vectormap.GestureType
@@ -421,19 +422,21 @@ fun MapScreen(
         )
 
         // 좌상단: 스캔결과 버튼 + PDR 토글 버튼
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .statusBarsPadding()
-                .padding(top = 8.dp, start = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            MapIconButton(
-                painter = painterResource(R.drawable.icon_log),
-                contentDescription = "스캔결과",
-                onClick = { onNavigateToScanDetail("wifi") }
-            )
+        if(SeoulStationPocApplication.IS_TEST) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(top = 8.dp, start = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                MapIconButton(
+                    painter = painterResource(R.drawable.icon_log),
+                    contentDescription = "스캔결과",
+                    onClick = { onNavigateToScanDetail("wifi") }
+                )
+            }
         }
 
         // 우측 중앙: 추적토글 / 1회스캔 / 자동스캔 (세로 정렬)
@@ -455,24 +458,26 @@ fun MapScreen(
                 onClick = { viewModel.toggleAutoScan() },
                 isActive = uiState.isAutoPositioning
             )
-            MapIconButton(
-                painter = painterResource(R.drawable.icon_test_marker),
-                contentDescription = "테스트 마커",
-                onClick = { viewModel.toggleTestMarker() },
-                isActive = uiState.isTestMarkerEnabled
-            )
-            MapIconButton(
-                painter = painterResource(R.drawable.icon_link),
-                contentDescription = "링크 표시",
-                onClick = { viewModel.toggleLink() },
-                isActive = uiState.isLinkEnabled
-            )
-            MapIconButton(
-                painter = painterResource(R.drawable.icon_link_matching),
-                contentDescription = "링크 매칭",
-                onClick = { viewModel.toggleLinkMatching() },
-                isActive = uiState.isLinkMatchingEnabled
-            )
+            if(SeoulStationPocApplication.IS_TEST) {
+                MapIconButton(
+                    painter = painterResource(R.drawable.icon_test_marker),
+                    contentDescription = "테스트 마커",
+                    onClick = { viewModel.toggleTestMarker() },
+                    isActive = uiState.isTestMarkerEnabled
+                )
+                MapIconButton(
+                    painter = painterResource(R.drawable.icon_link),
+                    contentDescription = "링크 표시",
+                    onClick = { viewModel.toggleLink() },
+                    isActive = uiState.isLinkEnabled
+                )
+                MapIconButton(
+                    painter = painterResource(R.drawable.icon_link_matching),
+                    contentDescription = "링크 매칭",
+                    onClick = { viewModel.toggleLinkMatching() },
+                    isActive = uiState.isLinkMatchingEnabled
+                )
+            }
         }
 
         // 우상단: 칼만 파라미터 설정 + 앵커 주기 + 층 선택
@@ -484,21 +489,23 @@ fun MapScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            KalmanParamButton(
-                label = "M",
-                value = "%.0f".format(uiState.kalmanMeasurementNoise),
-                onClick = { viewModel.showKalmanMeasurementDialog() }
-            )
-            KalmanParamButton(
-                label = "P",
-                value = "%.1f".format(uiState.kalmanProcessNoise),
-                onClick = { viewModel.showKalmanProcessDialog() }
-            )
-            KalmanParamButton(
-                label = "R",
-                value = "${uiState.pdrResetIntervalSec}s",
-                onClick = { viewModel.showPdrResetIntervalDialog() }
-            )
+            if(SeoulStationPocApplication.IS_TEST) {
+                KalmanParamButton(
+                    label = "M",
+                    value = "%.0f".format(uiState.kalmanMeasurementNoise),
+                    onClick = { viewModel.showKalmanMeasurementDialog() }
+                )
+                KalmanParamButton(
+                    label = "P",
+                    value = "%.1f".format(uiState.kalmanProcessNoise),
+                    onClick = { viewModel.showKalmanProcessDialog() }
+                )
+                KalmanParamButton(
+                    label = "R",
+                    value = "${uiState.pdrResetIntervalSec}s",
+                    onClick = { viewModel.showPdrResetIntervalDialog() }
+                )
+            }
             FloorSelectionDropdown(
                 selectedFloor = uiState.selectedFloor,
                 onFloorSelected = { viewModel.setFloor(it) }
@@ -579,7 +586,7 @@ fun MapScreen(
         val fingerprintEntries = uiState.fingerprintEntries
         val anchorDirectionLabel = uiState.anchorDirectionLabel
         val matchCount = fingerprintEntries?.count { it.rssi != MISSING_RSSI } ?: 0
-        val hasBottom = uiState.isAutoPositioning &&
+        val hasBottom = (SeoulStationPocApplication.IS_TEST && uiState.isAutoPositioning) &&
                 (fingerprintEntries != null || errorMessage != null || finalLocation != null ||
                  anchorDirectionLabel != null ||
                  (isTestMarkerEnabled && (serverLocation != null || kalmanFilteredLocation != null ||
