@@ -128,6 +128,8 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
     private var autoScanJob: Job? = null
     private var rttJob: Job? = null
     private var pdrOrigin: LocationResult? = null
+    private var mapScanJob: Job? = null
+    private var consecutiveForwardCount = 0
 
     var linkData: List<LinkData> = emptyList()
         private set
@@ -296,11 +298,6 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                 var cycleCount = 0
 
                 try {
-                    withContext(Dispatchers.IO) { bleScanner.startScan() }
-                    sensorCollector.start()
-                    fusedLocationProvider.start(SCAN_INTERVAL_MS)
-                    pdrProcessor.start()
-
                     // RTT 스캔 — 독립 주기 실행
                     if (rttScanner != null && rttScanner.isSupported) {
                         rttJob = launch {
@@ -329,15 +326,6 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                         Log.i(TAG, "RTT 스캔 시작")
                     } else {
                         Log.d(TAG, "RTT 미지원 — 스캔 생략")
-                    }
-
-                    // GPS 위치 수신 → fusedLocation 갱신
-                    launch {
-                        fusedLocationProvider.locationFlow
-                            .filterNotNull()
-                            .collect { loc ->
-                                _uiState.update { state -> state.copy(fusedLocation = loc) }
-                            }
                     }
 
                     // PDR 걸음 감지 → pdrLocation + finalLocation 갱신
@@ -369,31 +357,14 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
 
-                    // PDR 주기 리셋 — pdrResetIntervalSec마다 최종좌표를 새 PDR 기준점으로 적용
-                    // resetDisplacement() 사용: stepCount를 emit하지 않아 UI 좌표 변화 없음
-                    launch {
-                        while (isActive) {
-                            delay(_uiState.value.pdrResetIntervalSec * 1000L)
-                            val finalLoc = _uiState.value.finalLocation ?: continue
-                            pdrOrigin = finalLoc
-                            pdrProcessor.resetDisplacement()
-                            Log.i(TAG, "PDR 주기 리셋 — 기준점=(${finalLoc.lat}, ${finalLoc.lng})")
-                        }
-                    }
-
-                    // 자동측위 시작 즉시: 캐시 WiFi로 첫 앵커 측위 (브로드캐스트를 기다리지 않음)
-                    launch {
-                        val cachedWifi = withContext(Dispatchers.IO) { wifiScanner.scan() }
-                        applyAnchor(cachedWifi, bleAccumulator.values.toList())
-                    }
-
-                    // 이후: WiFi 브로드캐스트 수신 → 보폭 조정 (2nd+ 앵커)
+                    // WiFi 브로드캐스트 수신 → 앵커 측위 (resultsFlow 내부에서 wifiManager.startScan() 호출)
                     launch {
                         wifiScanner.resultsFlow().collect { wifiList ->
                             if (wifiList.isEmpty()) return@collect
                             applyAnchor(wifiList, bleAccumulator.values.toList())
                         }
                     }
+                    Log.i(TAG, "WiFi 브로드캐스트 수신 대기 시작")
 
                     // BLE 누적 루프
                     while (isActive) {
@@ -404,15 +375,11 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                         Log.d(TAG, "[자동측위] #$cycle — BLE누적=${bleAccumulator.size}(+${newBle.size})")
                     }
                 } finally {
-                    withContext(NonCancellable) {
-                        withContext(Dispatchers.IO) { bleScanner.stopScan() }
-                        sensorCollector.stop()
-                        fusedLocationProvider.stop()
-                        pdrProcessor.stop()
-                    }
+                    // WiFi 브로드캐스트 수신은 resultsFlow() Flow 취소로 자동 해제됨
                     kalmanProcessor.reset()
                     rttLocationFilter.reset()
                     pdrOrigin = null
+                    consecutiveForwardCount = 0
                     rttJob?.cancel()
                     rttJob = null
                     Log.i(TAG, "[자동측위] 종료")
@@ -426,7 +393,6 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                             kalmanFilteredLocation = null,
                             finalLocation          = null,
                             pdrLocation            = null,
-                            fusedLocation          = null,
                             locationHistory        = emptyList(),
                             anchorDirectionLabel   = null
                         )
@@ -436,23 +402,33 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * 화면 종료 직전에 호출 — 코루틴 취소 + BLE 즉시 중단 + 로그 파일 닫기.
-     */
-    /** 맵 화면 진입 시 호출 — 나침반(회전벡터) 센서를 미리 등록해 방향 수렴 시간을 확보한다. */
-    fun preparePdrSensors() {
-        if (autoScanJob?.isActive == true) return  // 자동측위 중이면 이미 등록됨
+    /** 맵 화면 진입 시 호출 — GPS/BLE/Sensor 스캔 시작 및 PDR 초기화. */
+    fun startMapScanning() {
+        if (mapScanJob?.isActive == true) return
         pdrProcessor.start()
-        Log.i(TAG, "PDR 센서 사전 등록 — 나침반 워밍업")
+        mapScanJob = viewModelScope.launch {
+            withContext(Dispatchers.IO) { bleScanner.startScan() }
+            sensorCollector.start()
+            fusedLocationProvider.start(SCAN_INTERVAL_MS)
+            fusedLocationProvider.locationFlow
+                .filterNotNull()
+                .collect { loc ->
+                    _uiState.update { state -> state.copy(fusedLocation = loc) }
+                }
+        }
+        Log.i(TAG, "맵 스캔 시작 — GPS/BLE/LTE/Sensor 활성화")
     }
 
     fun shutDown() {
         Log.i(TAG, "shutDown — 자동스캔 및 BLE 즉시 정리")
         appLogger.i(TAG, "shutDown — 자동스캔 및 BLE 즉시 정리")
+        mapScanJob?.cancel()
         autoScanJob?.cancel()
         rttJob?.cancel()
-        pdrProcessor.stop()   // preparePdrSensors()로 시작된 경우도 정리
+        pdrProcessor.stop()
         bleScanner.stopScan()
+        sensorCollector.stop()
+        fusedLocationProvider.stop()
         scanLogger.close()
         appLogger.close()
     }
@@ -521,29 +497,45 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 Log.i(TAG, "[앵커] 첫 스냅 — pdrOrigin=(${raw.lat}, ${raw.lng})")
             } else {
-                // ── 2번째 이후 앵커: 보폭 조정 + finalLocation 갱신만 ──
+                // ── 2번째 이후 앵커: 방향 판단 → 보폭 조정 → (정방향 3회↑) PDR 기준점 갱신 ──
+                val curPdrGeo = _uiState.value.pdrLocation?.let { GeoPos(it.lat, it.lng) } ?: prevFinalGeo
 
-                // PDR 좌표 → 앵커 방향 vs 이동 히스토리 방향 비교 → 보폭 설정
-                val curPdrGeo = _uiState.value.pdrLocation?.let { GeoPos(it.lat, it.lng) }
-                    ?: prevFinalGeo
-                val pdrToAnchorBearing = geoBearingRad(
-                    curPdrGeo.lat, curPdrGeo.lng,
-                    anchorGeo.lat, anchorGeo.lng
-                )
-                val historySnap = _uiState.value.locationHistory
-                var directionLabel: String? = null
-                if (historySnap.size >= 2) {
-                    val p1 = historySnap[historySnap.size - 2]
-                    val p2 = historySnap[historySnap.size - 1]
-                    val travelBearing = geoBearingRad(p1.lat, p1.lng, p2.lat, p2.lng)
-                    val diffDeg = angleDiffDeg(travelBearing, pdrToAnchorBearing)
-                    val stepLen = if (diffDeg <= 80.0) 0.7f else 0.45f
-                    directionLabel = if (diffDeg <= 80.0) "정방향" else "역방향"
-                    pdrProcessor.setStepLength(stepLen)
-                    Log.i(TAG, "[앵커] 보폭 조정 — diff=${"%.1f".format(diffDeg)}° $directionLabel → ${stepLen}m")
+                // historyAngle: 마지막 4개 좌표의 평균 진행 방향 (circular mean)
+                val histPoints = _uiState.value.locationHistory.takeLast(4)
+                val historyAngleRad: Double? = if (histPoints.size >= 2) {
+                    val bearings = (0 until histPoints.size - 1).map { i ->
+                        geoBearingRad(histPoints[i].lat, histPoints[i].lng, histPoints[i+1].lat, histPoints[i+1].lng)
+                    }
+                    val meanSin = bearings.sumOf { sin(it) } / bearings.size
+                    val meanCos = bearings.sumOf { cos(it) } / bearings.size
+                    atan2(meanSin, meanCos)
+                } else null
+
+                // anchorAngle: 현재 PDR 좌표 → anchor 측위 좌표 방향
+                val anchorAngleRad = geoBearingRad(curPdrGeo.lat, curPdrGeo.lng, anchorGeo.lat, anchorGeo.lng)
+
+                val diffDeg = if (historyAngleRad != null) angleDiffDeg(historyAngleRad, anchorAngleRad) else 0.0
+                val isForward = historyAngleRad == null || diffDeg <= 80.0
+
+                val directionLabel: String
+                if (isForward) {
+                    consecutiveForwardCount++
+                    pdrProcessor.setStepLength(0.75f)
+                    directionLabel = "정방향"
+                    Log.i(TAG, "[앵커] 정방향 — diff=${"%.1f".format(diffDeg)}° 연속 ${consecutiveForwardCount}회 보폭=0.75m")
+                    if (consecutiveForwardCount >= 3) {
+                        pdrOrigin = raw
+                        pdrProcessor.resetDisplacement()
+                        Log.i(TAG, "[앵커] PDR 기준점 갱신 — (${raw.lat}, ${raw.lng})")
+                    }
+                } else {
+                    consecutiveForwardCount = 0
+                    pdrProcessor.setStepLength(0.45f)
+                    directionLabel = "역방향"
+                    Log.i(TAG, "[앵커] 역방향 — diff=${"%.1f".format(diffDeg)}° 보폭=0.45m")
                 }
-                val toastMsg = if (directionLabel != null) "앵커 측위 — $directionLabel" else "앵커 측위 완료"
-                Toast.makeText(getApplication(), toastMsg, Toast.LENGTH_SHORT).show()
+
+                Toast.makeText(getApplication(), "앵커 측위 — $directionLabel", Toast.LENGTH_SHORT).show()
                 _uiState.update { it.copy(anchorDirectionLabel = directionLabel) }
             }
         } catch (e: CancellationException) {

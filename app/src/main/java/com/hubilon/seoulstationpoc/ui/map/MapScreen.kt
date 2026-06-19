@@ -131,9 +131,9 @@ fun MapScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // 맵 진입 시 PDR 센서 사전 등록 — 나침반 방향 수렴 시간 확보
+    // 맵 진입 시 GPS/BLE/Sensor 스캔 시작
     LaunchedEffect(Unit) {
-        viewModel.preparePdrSensors()
+        viewModel.startMapScanning()
     }
 
     // 자동측위 중 화면 자동잠김 방지
@@ -407,7 +407,7 @@ fun MapScreen(
                     if (isAutoScanning && isTestMarkerEnabled && isPdrEnabled) pdrLocation?.let { LatLng.from(it.lat, it.lng) } else null
                 )
                 view.updateFusedLocation(
-                    if (isAutoScanning && isTestMarkerEnabled) fusedLocation?.let { LatLng.from(it.lat, it.lng) } else null
+                    if (isTestMarkerEnabled) fusedLocation?.let { LatLng.from(it.lat, it.lng) } else null
                 )
                 // 최종 마커: 자동측위 ON/OFF에만 연동
                 view.updateFinalLocation(
