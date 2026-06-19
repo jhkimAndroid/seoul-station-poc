@@ -3,6 +3,7 @@ package com.hubilon.seoulstationpoc.ui.map
 import android.app.Application
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hubilon.seoulstationpoc.data.api.LocationApiClient
@@ -12,12 +13,10 @@ import com.hubilon.seoulstationpoc.data.geojson.LinkParser
 import com.hubilon.seoulstationpoc.data.lte.LteScanner
 import com.hubilon.seoulstationpoc.data.fingerprint.FingerprintBuilder
 import com.hubilon.seoulstationpoc.data.location.FusedLocationProvider
-import com.hubilon.seoulstationpoc.data.location.LocationPipeline
 import com.hubilon.seoulstationpoc.data.location.processor.KalmanProcessor
 import com.hubilon.seoulstationpoc.data.location.processor.LinkMatchProcessor
 import com.hubilon.seoulstationpoc.data.location.processor.LocationSourceType
 import com.hubilon.seoulstationpoc.data.location.processor.ProcessContext
-import com.hubilon.seoulstationpoc.data.location.processor.SmoothStepProcessor
 import com.hubilon.seoulstationpoc.data.pdr.PdrProcessor
 import com.hubilon.seoulstationpoc.data.fingerprint.FingerprintEntry
 import com.hubilon.seoulstationpoc.data.fingerprint.MISSING_RSSI
@@ -35,7 +34,6 @@ import com.hubilon.seoulstationpoc.util.AppLog
 import com.hubilon.seoulstationpoc.util.AppLogger
 import com.hubilon.seoulstationpoc.util.ScanLogger
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -59,14 +57,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val TAG = AppLog.VM
-private const val ANCHOR_INTERVAL_MS          = 30_000L
+private const val PDR_RESET_INTERVAL_DEFAULT_S  = 10        // PDR 주기 리셋 기본값(초)
 private const val SCAN_INTERVAL_MS            = 1_000L
 private const val LOCATION_HISTORY_MIN_DIST_M = 1.0
 private const val LOCATION_HISTORY_MAX_SIZE   = 20
-private const val SMOOTH_THRESHOLD_M          = 10.0  // 스무딩 발동 거리 기준
-private const val SMOOTH_STEP_M               = 2.0   // 1회 이동 거리
-private const val SMOOTH_OVERRIDE_COUNT       = 3     // 초과 시 서버좌표 직접 사용
-private const val SMOOTH_DIR_TOLERANCE_DEG    = 45.0  // 첫 방향 기준 허용 각도
 
 enum class FloorSelection { HIDDEN, F2, F3 }
 
@@ -80,8 +74,6 @@ data class MapUiState(
     val scanData: ScanData = ScanData(),
     val isAutoPositioning: Boolean = false,
     val isTracking: Boolean = false,
-    val trackerSmoothStep: Double = 2.0,
-    val showTrackerSmoothDialog: Boolean = false,
     val serverLocation: LocationResult? = null,       // 서버측위 원본 (파란 마커)
     val kalmanFilteredLocation: LocationResult? = null, // 칼만필터 적용 (보라 마커)
     val finalLocation: LocationResult? = null,        // 파이프라인 최종 (빨간 마커)
@@ -105,7 +97,10 @@ data class MapUiState(
     val isLinkEnabled: Boolean = true,  // 링크 폴리라인 표시
     val isLinkMatchingEnabled: Boolean = false,  // 터치 스냅 마커
     val linkTouchPoint: GeoPos? = null,
-    val linkSnappedPoint: GeoPos? = null
+    val linkSnappedPoint: GeoPos? = null,
+    val pdrResetIntervalSec: Int = PDR_RESET_INTERVAL_DEFAULT_S,  // PDR 갱신 주기 (초)
+    val showPdrResetIntervalDialog: Boolean = false,
+    val anchorDirectionLabel: String? = null   // "정방향" | "역방향" | null
 )
 
 class MapViewModel(application: Application) : AndroidViewModel(application) {
@@ -124,11 +119,8 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
         RttScanner(application.applicationContext)
     } else null
 
-    // 위치 처리 파이프라인: 링크매칭 → 스무딩 → 칼만
-    private val linkMatchProcessor  = LinkMatchProcessor()
-    private val smoothStepProcessor = SmoothStepProcessor()
-    private val kalmanProcessor     = KalmanProcessor()
-    private val pipeline = LocationPipeline(listOf(linkMatchProcessor, smoothStepProcessor, kalmanProcessor))
+    private val linkMatchProcessor = LinkMatchProcessor()
+    private val kalmanProcessor    = KalmanProcessor()
 
     private val _uiState = MutableStateFlow(MapUiState())
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
@@ -136,8 +128,6 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
     private var autoScanJob: Job? = null
     private var rttJob: Job? = null
     private var pdrOrigin: LocationResult? = null
-    private var smoothCount = 0          // 연속 스무딩 발동 횟수
-    private var smoothInitBearing: Double? = null  // 첫 발동 시 기준 방향
 
     var linkData: List<LinkData> = emptyList()
         private set
@@ -257,9 +247,16 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun showKalmanMeasurementDialog() { _uiState.update { it.copy(showKalmanMeasurementDialog = true) } }
-    fun showKalmanProcessDialog()     { _uiState.update { it.copy(showKalmanProcessDialog = true) } }
-    fun dismissKalmanDialogs()        { _uiState.update { it.copy(showKalmanMeasurementDialog = false, showKalmanProcessDialog = false) } }
+    fun showKalmanMeasurementDialog()  { _uiState.update { it.copy(showKalmanMeasurementDialog = true) } }
+    fun showKalmanProcessDialog()      { _uiState.update { it.copy(showKalmanProcessDialog = true) } }
+    fun dismissKalmanDialogs()         { _uiState.update { it.copy(showKalmanMeasurementDialog = false, showKalmanProcessDialog = false) } }
+    fun showPdrResetIntervalDialog()     { _uiState.update { it.copy(showPdrResetIntervalDialog = true) } }
+    fun dismissPdrResetIntervalDialog()  { _uiState.update { it.copy(showPdrResetIntervalDialog = false) } }
+    fun setPdrResetIntervalSec(sec: Int) {
+        val clamped = sec.coerceIn(5, 20)
+        _uiState.update { it.copy(pdrResetIntervalSec = clamped, showPdrResetIntervalDialog = false) }
+        Log.i(TAG, "PDR 갱신 주기 변경: ${clamped}s")
+    }
 
     fun setKalmanMeasurementNoise(sigma: Double) {
         kalmanProcessor.filter.measurementNoiseSigma = sigma
@@ -282,16 +279,8 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
         Log.i(TAG, "PDR 초기화 — 새 기준점=(${pdrOrigin?.lat}, ${pdrOrigin?.lng})")
     }
 
-    fun showTrackerSmoothDialog()    { _uiState.update { it.copy(showTrackerSmoothDialog = true) } }
-    fun dismissTrackerSmoothDialog() { _uiState.update { it.copy(showTrackerSmoothDialog = false) } }
-
-    fun setTrackerSmoothStep(step: Double) {
-        Log.i(TAG, "트래커 smooth step 변경: ${step}m")
-        _uiState.update { it.copy(trackerSmoothStep = step, showTrackerSmoothDialog = false) }
-    }
-
     // 자동측위 토글
-    // ON  → BLE 상시 스캔, 1s마다 tracker 위치추론 / 첫 실행 + 30s마다 anchor 위치추론
+    // ON  → BLE 상시 스캔, 초기 1회 anchor 측위 → PDR 실시간 측위 → 5s마다 PDR 주기 리셋
     // OFF → 코루틴 취소 → finally에서 BLE 중단 및 상태 초기화
     fun toggleAutoScan() {
         if (autoScanJob?.isActive == true) {
@@ -299,15 +288,12 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
             appLogger.i(TAG, "자동측위 중지 요청")
             autoScanJob?.cancel()
         } else {
-            Log.i(TAG, "자동측위 시작 — tracker간격=${SCAN_INTERVAL_MS}ms anchor간격=${ANCHOR_INTERVAL_MS}ms")
+            Log.i(TAG, "자동측위 시작 — 초기앵커 1회 + PDR 주기리셋 ${_uiState.value.pdrResetIntervalSec}s")
             appLogger.i(TAG, "자동측위 시작")
             _uiState.update { it.copy(isAutoPositioning = true, errorMessage = null) }
             autoScanJob = viewModelScope.launch {
-                val bleAccumulator  = mutableMapOf<String, BleSignal>()
-                val wifiAccumulator = mutableMapOf<String, WifiSignal>()
-                var pendingApiJob: Job? = null
+                val bleAccumulator = mutableMapOf<String, BleSignal>()
                 var cycleCount = 0
-                var lastAnchorTimeMs = System.currentTimeMillis() - ANCHOR_INTERVAL_MS
 
                 try {
                     withContext(Dispatchers.IO) { bleScanner.startScan() }
@@ -354,197 +340,68 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                             }
                     }
 
-                    // PDR 걸음 감지 → pdrLocation 갱신
+                    // PDR 걸음 감지 → pdrLocation + finalLocation 갱신
                     launch {
                         pdrProcessor.stepCount.collect {
-                            _uiState.update { state ->
-                                if (!state.isPdrEnabled) state
-                                else state.copy(
-                                    pdrLocation = pdrOrigin?.let { origin ->
-                                        pdrProcessor.applyPdr(origin.lat, origin.lng)
-                                    }
+                            val state = _uiState.value
+                            if (!state.isPdrEnabled) return@collect
+                            val origin = pdrOrigin ?: return@collect
+                            val newPdrLoc = pdrProcessor.applyPdr(origin.lat, origin.lng)
+                            val pdrGeo = GeoPos(newPdrLoc.lat, newPdrLoc.lng)
+                            val ctx = ProcessContext(
+                                previousFinal   = state.finalLocation?.let { GeoPos(it.lat, it.lng) } ?: pdrGeo,
+                                sourceType      = LocationSourceType.ANCHOR,
+                                isKalmanEnabled = false,
+                                smoothStep      = 0.0,
+                                linkData        = linkData
+                            )
+                            val finalGeo = linkMatchProcessor.process(pdrGeo, ctx)
+                            val finalLoc = LocationResult(finalGeo.lat, finalGeo.lng)
+                            _uiState.update { s ->
+                                val history = updateLocationHistory(s.locationHistory, finalGeo)
+                                s.copy(
+                                    pdrLocation         = newPdrLoc,
+                                    finalLocation       = finalLoc,
+                                    locationHistory     = history,
+                                    locationUpdateCount = s.locationUpdateCount + 1
                                 )
                             }
                         }
                     }
 
+                    // PDR 주기 리셋 — pdrResetIntervalSec마다 최종좌표를 새 PDR 기준점으로 적용
+                    // resetDisplacement() 사용: stepCount를 emit하지 않아 UI 좌표 변화 없음
+                    launch {
+                        while (isActive) {
+                            delay(_uiState.value.pdrResetIntervalSec * 1000L)
+                            val finalLoc = _uiState.value.finalLocation ?: continue
+                            pdrOrigin = finalLoc
+                            pdrProcessor.resetDisplacement()
+                            Log.i(TAG, "PDR 주기 리셋 — 기준점=(${finalLoc.lat}, ${finalLoc.lng})")
+                        }
+                    }
+
+                    // 자동측위 시작 즉시: 캐시 WiFi로 첫 앵커 측위 (브로드캐스트를 기다리지 않음)
+                    launch {
+                        val cachedWifi = withContext(Dispatchers.IO) { wifiScanner.scan() }
+                        applyAnchor(cachedWifi, bleAccumulator.values.toList())
+                    }
+
+                    // 이후: WiFi 브로드캐스트 수신 → 보폭 조정 (2nd+ 앵커)
+                    launch {
+                        wifiScanner.resultsFlow().collect { wifiList ->
+                            if (wifiList.isEmpty()) return@collect
+                            applyAnchor(wifiList, bleAccumulator.values.toList())
+                        }
+                    }
+
+                    // BLE 누적 루프
                     while (isActive) {
                         delay(SCAN_INTERVAL_MS)
                         val cycle = ++cycleCount
-                        val nowMs = System.currentTimeMillis()
-
                         val newBle = withContext(Dispatchers.IO) { bleScanner.getSnapshotResults() }
                         for (signal in newBle) bleAccumulator[signal.deviceAddress] = signal
-
-                        val newWifi = withContext(Dispatchers.IO) { wifiScanner.scan() }
-                        for (signal in newWifi) wifiAccumulator[signal.bssid] = signal
-
-                        val bleList    = bleAccumulator.values.toList()
-                        val wifiList   = wifiAccumulator.values.toList()
-                        val lteList    = withContext(Dispatchers.IO) { lteScanner.scan() }
-                        val sensorSnap = sensorCollector.getSnapshot()
-
-                        val isAnchorTime = (nowMs - lastAnchorTimeMs) >= ANCHOR_INTERVAL_MS
-                        Log.d(TAG, "[자동측위] #$cycle — BLE누적=${bleList.size}(+${newBle.size}) WiFi누적=${wifiList.size}(+${newWifi.size}) LTE=${lteList.size} anchor=$isAnchorTime")
-
-                        if (isAnchorTime) {
-                            if (pendingApiJob?.isActive == true) {
-                                Log.d(TAG, "[자동측위] 앵커 실행 — 트래커 취소 (#$cycle)")
-                                pendingApiJob!!.cancel()
-                            }
-                            lastAnchorTimeMs = nowMs
-
-                            val anchorScanData = ScanData(wifiList, bleList, sensorSnap, lteList)
-                            bleAccumulator.clear()
-                            wifiAccumulator.clear()
-
-                            val entries = withContext(Dispatchers.Default) {
-                                FingerprintBuilder.buildEntries(anchorScanData)
-                            }
-                            Log.d(TAG, "[자동측위] 앵커 핑거프린트 — 매칭=${entries.count { it.rssi != MISSING_RSSI }}/${entries.size}")
-                            scanLogger.logScan(bleList, wifiList, entries, sensorSnap, lteList)
-                            _uiState.update { it.copy(scanData = anchorScanData, fingerprintEntries = entries) }
-
-                            pendingApiJob = launch {
-                                try {
-                                    val values = FingerprintBuilder.buildAnchorPayload(anchorScanData)
-                                    if (values.isEmpty()) {
-                                        Log.d(TAG, "[자동측위] 앵커 피처 없음 — 전송 생략 (#$cycle)")
-                                        return@launch
-                                    }
-                                    val raw = apiClient.anchorPredict(values)
-                                    val serverGeo = GeoPos(raw.lat, raw.lng)
-                                    val prevFinal = _uiState.value.finalLocation?.let { GeoPos(it.lat, it.lng) }
-
-                                    // Step 2: 최초 수신 시 서버좌표 = 최종좌표 (파이프라인 없이 직접 적용)
-                                    if (prevFinal == null) {
-                                        Log.i(TAG, "[앵커] #$cycle 초기 — raw=(${raw.lat},${raw.lng})")
-                                        _uiState.update { state ->
-                                            if (!state.isPdrEnabled) state.copy(
-                                                serverLocation      = raw,
-                                                finalLocation       = raw,
-                                                locationHistory     = listOf(serverGeo),
-                                                locationUpdateCount = state.locationUpdateCount + 1
-                                            ) else {
-                                                pdrProcessor.reset()
-                                                pdrOrigin = raw
-                                                state.copy(
-                                                    serverLocation      = raw,
-                                                    finalLocation       = raw,
-                                                    pdrLocation         = raw,
-                                                    locationHistory     = listOf(serverGeo),
-                                                    locationUpdateCount = state.locationUpdateCount + 1
-                                                )
-                                            }
-                                        }
-                                    } else {
-                                        // Step 3: 거리 체크 스무딩 → Step 4: Kalman → Step 5: LinkMatch
-                                        val smoothed = applyDistanceSmoothing(serverGeo, prevFinal)
-                                        val ctx = ProcessContext(
-                                            previousFinal   = prevFinal,
-                                            sourceType      = LocationSourceType.ANCHOR,
-                                            isKalmanEnabled = _uiState.value.isKalmanEnabled,
-                                            smoothStep      = _uiState.value.trackerSmoothStep,
-                                            linkData        = linkData
-                                        )
-                                        val kalmanGeo    = kalmanProcessor.process(smoothed, ctx)
-                                        val finalGeo     = linkMatchProcessor.process(kalmanGeo, ctx)
-                                        val kalmanLoc    = LocationResult(kalmanGeo.lat, kalmanGeo.lng)
-                                        val finalLoc     = LocationResult(finalGeo.lat, finalGeo.lng)
-                                        Log.i(TAG, "[앵커] #$cycle — raw=(${raw.lat},${raw.lng}) smoothed=(${smoothed.lat},${smoothed.lng}) kalman=(${kalmanLoc.lat},${kalmanLoc.lng}) final=(${finalLoc.lat},${finalLoc.lng})")
-                                        _uiState.update { state ->
-                                            val history = updateLocationHistory(state.locationHistory, finalGeo)
-                                            if (!state.isPdrEnabled) state.copy(
-                                                serverLocation         = raw,
-                                                kalmanFilteredLocation = kalmanLoc,
-                                                finalLocation          = finalLoc,
-                                                locationHistory        = history,
-                                                locationUpdateCount    = state.locationUpdateCount + 1
-                                            ) else {
-                                                pdrProcessor.reset()
-                                                pdrOrigin = finalLoc
-                                                state.copy(
-                                                    serverLocation         = raw,
-                                                    kalmanFilteredLocation = kalmanLoc,
-                                                    finalLocation          = finalLoc,
-                                                    pdrLocation            = finalLoc,
-                                                    locationHistory        = history,
-                                                    locationUpdateCount    = state.locationUpdateCount + 1
-                                                )
-                                            }
-                                        }
-                                    }
-                                } catch (e: CancellationException) {
-                                    // 정상 흐름 — 앵커 실행에 의한 취소
-                                } catch (e: Exception) {
-                                    Log.w(TAG, "[자동측위] 앵커 #$cycle API 오류: ${e.message}")
-                                }
-                            }
-                        } else if (pendingApiJob?.isActive != true) {
-                            // 트래커 실행: 진행 중인 요청 없을 때만
-                            val trackerScanData = ScanData(wifiList, bleList, sensorSnap, lteList)
-
-                            pendingApiJob = launch {
-                                try {
-                                    val values = FingerprintBuilder.buildTrackerPayload(trackerScanData)
-                                    if (values.isEmpty()) {
-                                        Log.d(TAG, "[자동측위] 트래커 피처 없음 — 전송 생략 (#$cycle)")
-                                        return@launch
-                                    }
-                                    val pdrLoc = _uiState.value.pdrLocation
-                                    val raw = if (pdrLoc != null)
-                                        apiClient.trackerPredict(values, pdrLoc.lat, pdrLoc.lng)
-                                    else
-                                        apiClient.trackerPredict(values)
-
-                                    val serverGeo = GeoPos(raw.lat, raw.lng)
-                                    val prevFinal = _uiState.value.finalLocation?.let { GeoPos(it.lat, it.lng) }
-
-                                    // Step 2: 최초 수신 시 서버좌표 = 최종좌표
-                                    if (prevFinal == null) {
-                                        Log.i(TAG, "[트래커] #$cycle 초기 — raw=(${raw.lat},${raw.lng})")
-                                        _uiState.update { state ->
-                                            state.copy(
-                                                serverLocation      = raw,
-                                                finalLocation       = raw,
-                                                locationHistory     = listOf(serverGeo),
-                                                locationUpdateCount = state.locationUpdateCount + 1
-                                            )
-                                        }
-                                    } else {
-                                        // Step 3: 거리 체크 스무딩 → Step 4: Kalman → Step 5: LinkMatch
-                                        val smoothed = applyDistanceSmoothing(serverGeo, prevFinal)
-                                        val ctx = ProcessContext(
-                                            previousFinal   = prevFinal,
-                                            sourceType      = LocationSourceType.TRACKER,
-                                            isKalmanEnabled = _uiState.value.isKalmanEnabled,
-                                            smoothStep      = _uiState.value.trackerSmoothStep,
-                                            linkData        = linkData
-                                        )
-                                        val kalmanGeo    = kalmanProcessor.process(smoothed, ctx)
-                                        val finalGeo     = linkMatchProcessor.process(kalmanGeo, ctx)
-                                        val kalmanLoc    = LocationResult(kalmanGeo.lat, kalmanGeo.lng)
-                                        val finalLoc     = LocationResult(finalGeo.lat, finalGeo.lng)
-                                        Log.i(TAG, "[트래커] #$cycle — raw=(${raw.lat},${raw.lng}) smoothed=(${smoothed.lat},${smoothed.lng}) kalman=(${kalmanLoc.lat},${kalmanLoc.lng}) final=(${finalLoc.lat},${finalLoc.lng})")
-                                        _uiState.update { state ->
-                                            state.copy(
-                                                serverLocation         = raw,
-                                                kalmanFilteredLocation = kalmanLoc,
-                                                finalLocation          = finalLoc,
-                                                locationHistory        = updateLocationHistory(state.locationHistory, finalGeo),
-                                                locationUpdateCount    = state.locationUpdateCount + 1
-                                            )
-                                        }
-                                    }
-                                } catch (e: CancellationException) {
-                                    // 정상 흐름
-                                } catch (e: Exception) {
-                                    Log.w(TAG, "[자동측위] 트래커 #$cycle API 오류: ${e.message}")
-                                }
-                            }
-                        } else {
-                            Log.d(TAG, "[자동측위] 트래커 #$cycle 건너뜀 — 이전 요청 진행 중")
-                        }
+                        Log.d(TAG, "[자동측위] #$cycle — BLE누적=${bleAccumulator.size}(+${newBle.size})")
                     }
                 } finally {
                     withContext(NonCancellable) {
@@ -556,8 +413,6 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                     kalmanProcessor.reset()
                     rttLocationFilter.reset()
                     pdrOrigin = null
-                    smoothCount = 0
-                    smoothInitBearing = null
                     rttJob?.cancel()
                     rttJob = null
                     Log.i(TAG, "[자동측위] 종료")
@@ -572,7 +427,8 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                             finalLocation          = null,
                             pdrLocation            = null,
                             fusedLocation          = null,
-                            locationHistory        = emptyList()
+                            locationHistory        = emptyList(),
+                            anchorDirectionLabel   = null
                         )
                     }
                 }
@@ -583,14 +439,118 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * 화면 종료 직전에 호출 — 코루틴 취소 + BLE 즉시 중단 + 로그 파일 닫기.
      */
+    /** 맵 화면 진입 시 호출 — 나침반(회전벡터) 센서를 미리 등록해 방향 수렴 시간을 확보한다. */
+    fun preparePdrSensors() {
+        if (autoScanJob?.isActive == true) return  // 자동측위 중이면 이미 등록됨
+        pdrProcessor.start()
+        Log.i(TAG, "PDR 센서 사전 등록 — 나침반 워밍업")
+    }
+
     fun shutDown() {
         Log.i(TAG, "shutDown — 자동스캔 및 BLE 즉시 정리")
         appLogger.i(TAG, "shutDown — 자동스캔 및 BLE 즉시 정리")
         autoScanJob?.cancel()
         rttJob?.cancel()
+        pdrProcessor.stop()   // preparePdrSensors()로 시작된 경우도 정리
         bleScanner.stopScan()
         scanLogger.close()
         appLogger.close()
+    }
+
+    /**
+     * WiFi/BLE 데이터로 앵커 측위를 수행한다.
+     *
+     * 첫 앵커 (pdrOrigin == null):
+     *   - 즉시 스냅 + PDR 기준점(pdrOrigin) 설정
+     *
+     * 2번째 이후 앵커:
+     *   - PDR 좌표 → 앵커 방향 vs 이동 히스토리 방향 비교 → 보폭만 조정
+     *     · 정방향(±45° 이내) → 0.8f  /  역방향 → 0.4f
+     *   - finalLocation / PDR 기준점은 변경하지 않음
+     */
+    private suspend fun applyAnchor(
+        wifiList: List<WifiSignal>,
+        bleList: List<BleSignal>
+    ) {
+        val lteList    = withContext(Dispatchers.IO) { lteScanner.scan() }
+        val sensorSnap = sensorCollector.getSnapshot()
+        val scanData   = ScanData(wifiList, bleList, sensorSnap, lteList)
+
+        val entries = withContext(Dispatchers.Default) { FingerprintBuilder.buildEntries(scanData) }
+        Log.d(TAG, "[앵커] WiFi=${wifiList.size} BLE=${bleList.size} 매칭=${entries.count { it.rssi != MISSING_RSSI }}/${entries.size}")
+        scanLogger.logScan(bleList, wifiList, entries, sensorSnap, lteList)
+        _uiState.update { it.copy(scanData = scanData, fingerprintEntries = entries) }
+
+        try {
+            val values = FingerprintBuilder.buildAnchorPayload(scanData)
+            if (values.isEmpty()) {
+                Log.d(TAG, "[앵커] 피처 없음 — 전송 생략")
+                return
+            }
+            val raw = apiClient.anchorPredict(values)
+            val anchorGeo = GeoPos(raw.lat, raw.lng)
+            Log.i(TAG, "[앵커] 측위 완료 — (${raw.lat}, ${raw.lng})")
+
+            _uiState.update { it.copy(serverLocation = raw) }
+
+            val prevFinalGeo = _uiState.value.finalLocation?.let { GeoPos(it.lat, it.lng) }
+
+            if (prevFinalGeo == null) {
+                // ── 첫 앵커: 즉시 스냅 + PDR 기준점 설정 ──
+                Toast.makeText(getApplication(), "앵커 첫 측위 완료", Toast.LENGTH_SHORT).show()
+                val ctx = ProcessContext(
+                    previousFinal   = anchorGeo,
+                    sourceType      = LocationSourceType.ANCHOR,
+                    isKalmanEnabled = false,
+                    smoothStep      = 0.0,
+                    linkData        = linkData
+                )
+                val linkedFinalGeo = linkMatchProcessor.process(anchorGeo, ctx)
+                val linkedFinalLoc = LocationResult(linkedFinalGeo.lat, linkedFinalGeo.lng)
+                pdrProcessor.reset()
+                pdrOrigin = raw
+                _uiState.update { state ->
+                    val history = updateLocationHistory(state.locationHistory, linkedFinalGeo)
+                    state.copy(
+                        finalLocation        = linkedFinalLoc,
+                        pdrLocation          = LocationResult(raw.lat, raw.lng),
+                        locationHistory      = history,
+                        locationUpdateCount  = state.locationUpdateCount + 1,
+                        anchorDirectionLabel = null
+                    )
+                }
+                Log.i(TAG, "[앵커] 첫 스냅 — pdrOrigin=(${raw.lat}, ${raw.lng})")
+            } else {
+                // ── 2번째 이후 앵커: 보폭 조정 + finalLocation 갱신만 ──
+
+                // PDR 좌표 → 앵커 방향 vs 이동 히스토리 방향 비교 → 보폭 설정
+                val curPdrGeo = _uiState.value.pdrLocation?.let { GeoPos(it.lat, it.lng) }
+                    ?: prevFinalGeo
+                val pdrToAnchorBearing = geoBearingRad(
+                    curPdrGeo.lat, curPdrGeo.lng,
+                    anchorGeo.lat, anchorGeo.lng
+                )
+                val historySnap = _uiState.value.locationHistory
+                var directionLabel: String? = null
+                if (historySnap.size >= 2) {
+                    val p1 = historySnap[historySnap.size - 2]
+                    val p2 = historySnap[historySnap.size - 1]
+                    val travelBearing = geoBearingRad(p1.lat, p1.lng, p2.lat, p2.lng)
+                    val diffDeg = angleDiffDeg(travelBearing, pdrToAnchorBearing)
+                    val stepLen = if (diffDeg <= 80.0) 0.7f else 0.45f
+                    directionLabel = if (diffDeg <= 80.0) "정방향" else "역방향"
+                    pdrProcessor.setStepLength(stepLen)
+                    Log.i(TAG, "[앵커] 보폭 조정 — diff=${"%.1f".format(diffDeg)}° $directionLabel → ${stepLen}m")
+                }
+                val toastMsg = if (directionLabel != null) "앵커 측위 — $directionLabel" else "앵커 측위 완료"
+                Toast.makeText(getApplication(), toastMsg, Toast.LENGTH_SHORT).show()
+                _uiState.update { it.copy(anchorDirectionLabel = directionLabel) }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "[앵커] API 오류: ${e.message}")
+        }
     }
 
     // Step 6: 최종좌표 이력 갱신 — 이전 좌표와 1.0m 이상 차이날 때만 추가, 최대 10개 유지
@@ -602,64 +562,6 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
         return (history + newPos).takeLast(LOCATION_HISTORY_MAX_SIZE)
     }
 
-    /**
-     * 서버측위와 이전 최종좌표의 거리가 SMOOTH_THRESHOLD_M 이상이면 스무딩 적용.
-     * 같은 방향(첫 발동 기준 ±SMOOTH_DIR_TOLERANCE_DEG)으로 SMOOTH_OVERRIDE_COUNT 초과 연속 발동 시
-     * 서버좌표를 바로 반환 (빠른 이동으로 판단).
-     */
-    private fun applyDistanceSmoothing(serverGeo: GeoPos, prevFinal: GeoPos): GeoPos {
-        val dist = geoDistanceM(prevFinal.lat, prevFinal.lng, serverGeo.lat, serverGeo.lng)
-        if (dist < SMOOTH_THRESHOLD_M) {
-            // 정상 범위: 카운터 리셋 후 서버좌표 그대로 사용
-            smoothCount = 0
-            smoothInitBearing = null
-            return serverGeo
-        }
-
-        val bearing = bearingDeg(prevFinal.lat, prevFinal.lng, serverGeo.lat, serverGeo.lng)
-        val initBearing = smoothInitBearing
-        val isSameDir = initBearing == null ||
-                angleDiffDeg(initBearing, bearing) <= SMOOTH_DIR_TOLERANCE_DEG
-
-        if (isSameDir) {
-            if (initBearing == null) smoothInitBearing = bearing  // 첫 발동: 기준 방향 고정
-            smoothCount++
-        } else {
-            // 방향 이탈: 새로운 기준으로 리셋
-            smoothCount = 1
-            smoothInitBearing = bearing
-        }
-
-        return if (smoothCount > SMOOTH_OVERRIDE_COUNT) {
-            // 같은 방향으로 3번 초과 연속 → 실제 이동으로 판단, 서버좌표 직접 사용
-            Log.i(TAG, "[스무딩] override smoothCount=$smoothCount bearing=${"%.1f".format(bearing)}°")
-            serverGeo
-        } else {
-            // 스무딩: prevFinal → serverGeo 방향으로 SMOOTH_STEP_M 이동
-            val ratio = SMOOTH_STEP_M / dist
-            Log.i(TAG, "[스무딩] step smoothCount=$smoothCount dist=${"%.1f".format(dist)}m bearing=${"%.1f".format(bearing)}°")
-            GeoPos(
-                prevFinal.lat + (serverGeo.lat - prevFinal.lat) * ratio,
-                prevFinal.lng + (serverGeo.lng - prevFinal.lng) * ratio
-            )
-        }
-    }
-
-    private fun bearingDeg(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
-        val dLng  = (lng2 - lng1) * PI / 180.0
-        val lat1R = lat1 * PI / 180.0
-        val lat2R = lat2 * PI / 180.0
-        val y = sin(dLng) * cos(lat2R)
-        val x = cos(lat1R) * sin(lat2R) - sin(lat1R) * cos(lat2R) * cos(dLng)
-        return (atan2(y, x) * 180.0 / PI + 360.0) % 360.0
-    }
-
-    private fun angleDiffDeg(a: Double, b: Double): Double {
-        var diff = ((b - a) % 360.0 + 360.0) % 360.0
-        if (diff > 180.0) diff -= 360.0
-        return abs(diff)
-    }
-
     private fun geoDistanceM(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
         val R    = 6371000.0
         val dLat = (lat2 - lat1) * PI / 180.0
@@ -667,6 +569,20 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
         val a    = sin(dLat / 2).pow(2) +
                    cos(lat1 * PI / 180.0) * cos(lat2 * PI / 180.0) * sin(dLng / 2).pow(2)
         return R * 2.0 * asin(sqrt(a))
+    }
+
+    /** 두 좌표 간 방위각(라디안). 0=북, 양수=시계 방향 — PdrProcessor.azimuthRad 와 동일 규약. */
+    private fun geoBearingRad(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+        val φ1   = lat1 * PI / 180.0
+        val φ2   = lat2 * PI / 180.0
+        val dLng = (lng2 - lng1) * PI / 180.0
+        return atan2(sin(dLng) * cos(φ2), cos(φ1) * sin(φ2) - sin(φ1) * cos(φ2) * cos(dLng))
+    }
+
+    /** 두 방위각(라디안) 간 최소 각도 차이(도, 0~180). */
+    private fun angleDiffDeg(a: Double, b: Double): Double {
+        val diff = ((b - a) * 180.0 / PI % 360.0 + 360.0) % 360.0
+        return if (diff <= 180.0) diff else 360.0 - diff
     }
 
     override fun onCleared() {

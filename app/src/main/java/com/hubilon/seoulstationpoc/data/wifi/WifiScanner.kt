@@ -1,28 +1,53 @@
 package com.hubilon.seoulstationpoc.data.wifi
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.util.Log
 import com.hubilon.seoulstationpoc.model.WifiSignal
 import com.hubilon.seoulstationpoc.util.AppLog
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 
 private const val TAG = AppLog.WIFI
 
 class WifiScanner(context: Context) {
 
-    private val wifiManager = context.applicationContext
-        .getSystemService(Context.WIFI_SERVICE) as WifiManager
+    private val appContext  = context.applicationContext
+    private val wifiManager = appContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
 
     fun isEnabled(): Boolean = wifiManager.isWifiEnabled
 
-    fun scan(): List<WifiSignal> {
-        if (!wifiManager.isWifiEnabled) {
-            Log.w(TAG, "WiFi 비활성화 상태 — 스캔 생략")
-            return emptyList()
+    /**
+     * 시스템이 WiFi 스캔을 완료할 때마다 최신 결과를 emit하는 Flow.
+     * SCAN_RESULTS_AVAILABLE_ACTION 브로드캐스트를 수신하므로 폴링 없이
+     * 실제 갱신 시점에만 데이터를 반환한다.
+     */
+    fun resultsFlow(): Flow<List<WifiSignal>> = callbackFlow {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                val updated = intent.getBooleanExtra(WifiManager.EXTRA_RESULTS_UPDATED, false)
+                val results = readResults()
+                Log.i(TAG, "WiFi 브로드캐스트 수신 — fresh=$updated AP=${results.size}개")
+                trySend(results)
+            }
         }
+        appContext.registerReceiver(
+            receiver,
+            IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
+        )
+        wifiManager.startScan()
+        awaitClose { appContext.unregisterReceiver(receiver) }
+    }
+
+    private fun readResults(): List<WifiSignal> {
+        if (!wifiManager.isWifiEnabled) return emptyList()
         return try {
-            val signals = wifiManager.scanResults.map { result ->
+            wifiManager.scanResults.map { result ->
                 WifiSignal(
                     ssid = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         result.wifiSsid?.toString()?.trim('"') ?: ""
@@ -31,19 +56,26 @@ class WifiScanner(context: Context) {
                         result.SSID ?: ""
                     },
                     bssid = result.BSSID ?: "",
-                    rssi = result.level
+                    rssi  = result.level
                 )
-            }
-            Log.i(TAG, "캐시 조회 완료 — ${signals.size}개")
-            if (signals.isNotEmpty()) {
-                signals.forEachIndexed { i, s ->
-                    Log.d(TAG, "  [$i] ssid=${s.ssid.ifEmpty { "(hidden)" }} bssid=${s.bssid} rssi=${s.rssi}dBm")
+            }.also { signals ->
+                if (signals.isNotEmpty()) {
+                    signals.forEachIndexed { i, s ->
+                        Log.d(TAG, "  [$i] ssid=${s.ssid.ifEmpty { "(hidden)" }} bssid=${s.bssid} rssi=${s.rssi}dBm")
+                    }
                 }
             }
-            signals
         } catch (e: SecurityException) {
             Log.e(TAG, "권한 없음: ${e.message}")
             emptyList()
         }
+    }
+
+    fun scan(): List<WifiSignal> {
+        if (!wifiManager.isWifiEnabled) {
+            Log.w(TAG, "WiFi 비활성화 상태 — 스캔 생략")
+            return emptyList()
+        }
+        return readResults().also { Log.i(TAG, "캐시 조회 완료 — ${it.size}개") }
     }
 }

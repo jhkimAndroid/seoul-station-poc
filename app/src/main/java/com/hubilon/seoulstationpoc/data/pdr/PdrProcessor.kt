@@ -24,7 +24,7 @@ private const val TAG = AppLog.SENSOR
 private const val STEP_HIGH_THRESHOLD  = 11.5f
 private const val STEP_LOW_THRESHOLD   = 9.5f
 private const val MIN_STEP_INTERVAL_MS = 300L
-private const val STEP_LENGTH_M        = 0.7f
+private const val STEP_LENGTH_DEFAULT_M = 0.6f
 
 /**
  * PDR 변위 트래커.
@@ -48,6 +48,9 @@ class PdrProcessor(context: Context) {
 
     // 방위각 (라디안, 0=북, 시계 방향 양수)
     @Volatile private var azimuthRad = 0f
+
+    // 보폭 (미터, 앵커 방향 비교로 동적 조정)
+    @Volatile private var stepLengthM = STEP_LENGTH_DEFAULT_M
 
     // 걸음 감지 상태 (pdrHandler 스레드 전용)
     private var stepHigh = false
@@ -91,8 +94,8 @@ class PdrProcessor(context: Context) {
 
     private fun onStepDetected() {
         val heading = azimuthRad.toDouble()
-        displacementNorth += STEP_LENGTH_M * cos(heading)
-        displacementEast  += STEP_LENGTH_M * sin(heading)
+        displacementNorth += stepLengthM * cos(heading)
+        displacementEast  += stepLengthM * sin(heading)
         totalSteps++
         _stepCount.value = totalSteps
         Log.d(TAG, "PDR 걸음 #$totalSteps — ΔN=%.2fm ΔE=%.2fm".format(displacementNorth, displacementEast))
@@ -110,7 +113,25 @@ class PdrProcessor(context: Context) {
         return LocationResult(lat + deltaLat, lng + deltaLng)
     }
 
-    /** 누적 변위와 걸음 수를 초기화한다. */
+    /**
+     * 방위각을 외부에서 직접 설정한다.
+     * 앵커 이동 방향으로 초기 방향을 보정할 때 사용하며, reset() 이후에도 값이 유지된다.
+     */
+    fun setAzimuth(radians: Double) {
+        azimuthRad = radians.toFloat()
+        Log.i(TAG, "PDR 방위각 보정 — ${"%.1f".format(radians * 180.0 / PI)}°")
+    }
+
+    /**
+     * 보폭을 외부에서 설정한다.
+     * 앵커 방향이 진행 방향과 일치하면 0.8f, 반대이면 0.4f로 조정한다.
+     */
+    fun setStepLength(meters: Float) {
+        stepLengthM = meters
+        Log.i(TAG, "PDR 보폭 조정 — ${meters}m")
+    }
+
+    /** 누적 변위와 걸음 수를 초기화하고 stepCount를 emit한다. 방위각은 초기화하지 않는다. */
     fun reset() {
         displacementNorth = 0.0
         displacementEast  = 0.0
@@ -118,6 +139,19 @@ class PdrProcessor(context: Context) {
         stepHigh          = false
         _stepCount.value  = 0
         Log.i(TAG, "PDR 초기화")
+    }
+
+    /**
+     * 누적 변위와 걸음 수만 초기화한다. stepCount를 emit하지 않으므로
+     * collector가 트리거되지 않아 UI 좌표가 변하지 않는다.
+     * PDR 주기 리셋처럼 위치를 유지한 채 기준점만 갱신할 때 사용한다.
+     */
+    fun resetDisplacement() {
+        displacementNorth = 0.0
+        displacementEast  = 0.0
+        totalSteps        = 0
+        stepHigh          = false
+        Log.i(TAG, "PDR 변위 초기화")
     }
 
     fun start() {

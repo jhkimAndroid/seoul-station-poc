@@ -131,6 +131,11 @@ fun MapScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // 맵 진입 시 PDR 센서 사전 등록 — 나침반 방향 수렴 시간 확보
+    LaunchedEffect(Unit) {
+        viewModel.preparePdrSensors()
+    }
+
     // 자동측위 중 화면 자동잠김 방지
     DisposableEffect(uiState.isAutoPositioning) {
         if (uiState.isAutoPositioning) {
@@ -470,7 +475,7 @@ fun MapScreen(
             )
         }
 
-        // 우상단: 칼만 파라미터 설정 + 수집주기 선택 + 층 선택
+        // 우상단: 칼만 파라미터 설정 + 앵커 주기 + 층 선택
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -488,6 +493,11 @@ fun MapScreen(
                 label = "P",
                 value = "%.1f".format(uiState.kalmanProcessNoise),
                 onClick = { viewModel.showKalmanProcessDialog() }
+            )
+            KalmanParamButton(
+                label = "R",
+                value = "${uiState.pdrResetIntervalSec}s",
+                onClick = { viewModel.showPdrResetIntervalDialog() }
             )
             FloorSelectionDropdown(
                 selectedFloor = uiState.selectedFloor,
@@ -525,6 +535,21 @@ fun MapScreen(
             )
         }
 
+        // PDR 갱신 주기 설정 다이얼로그 (5~20초, 1초 단위)
+        if (uiState.showPdrResetIntervalDialog) {
+            KalmanParamDialog(
+                title = "PDR 갱신 주기 (R)",
+                description = "pdrResetIntervalSec",
+                hint = "▲ 올리면: PDR 드리프트 누적 증가\n▼ 내리면: 기준점 갱신 빈도 증가",
+                currentValue = uiState.pdrResetIntervalSec.toFloat(),
+                valueRange = 5f..30f,
+                steps = 14,
+                formatValue = { "${it.toInt()}s" },
+                onConfirm = { viewModel.setPdrResetIntervalSec(it.toInt()) },
+                onDismiss = { viewModel.dismissPdrResetIntervalDialog() }
+            )
+        }
+
         // 우측 하단: 마커 범례 — 테스트 마커 ON일 때만 표시
         if (isTestMarkerEnabled) {
             Surface(
@@ -552,9 +577,11 @@ fun MapScreen(
         // 하단 중앙: 자동측위 ON일 때만 표시
         val errorMessage = uiState.errorMessage
         val fingerprintEntries = uiState.fingerprintEntries
+        val anchorDirectionLabel = uiState.anchorDirectionLabel
         val matchCount = fingerprintEntries?.count { it.rssi != MISSING_RSSI } ?: 0
         val hasBottom = uiState.isAutoPositioning &&
                 (fingerprintEntries != null || errorMessage != null || finalLocation != null ||
+                 anchorDirectionLabel != null ||
                  (isTestMarkerEnabled && (serverLocation != null || kalmanFilteredLocation != null ||
                   pdrLocation != null || fusedLocation != null)))
 
@@ -581,6 +608,16 @@ fun MapScreen(
                             StatChip(label = "WiFi", value = uiState.scanData.wifiSignals.size.toString())
                             StatChip(label = "매칭", value = "$matchCount / ${fingerprintEntries.size}")
                         }
+                    }
+                    if (anchorDirectionLabel != null) {
+                        val dirColor = if (anchorDirectionLabel == "정방향") Color(0xFF4CAF50) else Color(0xFFF44336)
+                        val dirText  = if (anchorDirectionLabel == "정방향") "▲ 정방향 (보폭 0.8m)" else "▼ 역방향 (보폭 0.4m)"
+                        Text(
+                            text = dirText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = dirColor,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                     if (errorMessage != null) {
                         Text(
