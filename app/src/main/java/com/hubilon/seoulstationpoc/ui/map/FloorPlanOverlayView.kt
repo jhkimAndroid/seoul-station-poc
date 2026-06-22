@@ -39,7 +39,7 @@ class FloorPlanOverlayView(context: Context) : View(context) {
     private var locationHistory: List<GeoPos> = emptyList()  // 이동경로 좌표 이력
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-        alpha = 200
+        alpha = 180
     }
     private val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val markerRadius = 15f * context.resources.displayMetrics.density

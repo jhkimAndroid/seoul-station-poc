@@ -90,8 +90,8 @@ import com.kakao.vectormap.shape.PolylineStyle
 
 private const val TAG = AppLog.MAP
 
-private val SEOUL_STATION = LatLng.from(37.5550, 126.9707)
-private const val DEFAULT_ZOOM = 17
+private val SEOUL_STATION = LatLng.from(37.55407996178773, 126.97066291608478)
+private const val DEFAULT_ZOOM = 19
 
 @Composable
 fun MapScreen(
@@ -107,6 +107,7 @@ fun MapScreen(
     var showExitDialog by remember { mutableStateOf(false) }
     var showWifiDialog by remember { mutableStateOf(false) }
     var showBluetoothDialog by remember { mutableStateOf(false) }
+//    var showRttPanel by remember { mutableStateOf(false) }
     val wifiManager = remember { context.getSystemService(Context.WIFI_SERVICE) as WifiManager }
     val bluetoothAdapter = remember {
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
@@ -218,6 +219,21 @@ fun MapScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showBluetoothDialog = false }) { Text("취소") }
+            }
+        )
+    }
+
+    if (uiState.isOutsideMbr) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("구역 이탈") },
+            text  = { Text("현재 위치가 서비스 구역을 벗어났습니다.\n앱을 종료합니다.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.shutDown()
+                    activity.finishAndRemoveTask()
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                }) { Text("종료") }
             }
         )
     }
@@ -464,7 +480,7 @@ fun MapScreen(
             }
         )
 
-        // 좌상단: 스캔결과 버튼 + PDR 토글 버튼
+        // 좌상단: 스캔결과 버튼
         if(SeoulStationPocApplication.IS_TEST) {
             Row(
                 modifier = Modifier
@@ -479,7 +495,79 @@ fun MapScreen(
                     contentDescription = "스캔결과",
                     onClick = { onNavigateToScanDetail("wifi") }
                 )
+                // RTT 버튼 (비활성화)
+//                Surface(
+//                    shape = MaterialTheme.shapes.small,
+//                    color = if (showRttPanel) MaterialTheme.colorScheme.primaryContainer
+//                            else MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+//                    shadowElevation = 4.dp,
+//                    modifier = Modifier
+//                        .size(44.dp)
+//                        .clickable { showRttPanel = !showRttPanel }
+//                ) {
+//                    Box(contentAlignment = Alignment.Center) {
+//                        Text(
+//                            text = "RTT",
+//                            style = MaterialTheme.typography.labelSmall,
+//                            fontWeight = FontWeight.Bold,
+//                            color = if (showRttPanel) MaterialTheme.colorScheme.onPrimaryContainer
+//                                    else MaterialTheme.colorScheme.onSurface
+//                        )
+//                    }
+//                }
             }
+
+            // RTT 스캔 결과 패널 (비활성화)
+//            if (showRttPanel) {
+//                val rttSignals = uiState.rttSignals
+//                Surface(
+//                    modifier = Modifier
+//                        .align(Alignment.TopStart)
+//                        .statusBarsPadding()
+//                        .padding(start = 8.dp, top = 60.dp)
+//                        .width(230.dp),
+//                    shape = MaterialTheme.shapes.medium,
+//                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.93f),
+//                    shadowElevation = 4.dp
+//                ) {
+//                    Column(
+//                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+//                        verticalArrangement = Arrangement.spacedBy(6.dp)
+//                    ) {
+//                        Text(
+//                            text = "RTT 결과 (${rttSignals.size}개)",
+//                            style = MaterialTheme.typography.labelMedium,
+//                            fontWeight = FontWeight.Bold
+//                        )
+//                        if (rttSignals.isEmpty()) {
+//                            Text(
+//                                text = "측정 결과 없음",
+//                                style = MaterialTheme.typography.bodySmall,
+//                                color = MaterialTheme.colorScheme.onSurfaceVariant
+//                            )
+//                        } else {
+//                            rttSignals.forEach { s ->
+//                                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+//                                    Text(
+//                                        text = s.bssid,
+//                                        style = MaterialTheme.typography.labelSmall,
+//                                        fontWeight = FontWeight.Bold
+//                                    )
+//                                    Text(
+//                                        text = "${"%.2f".format(s.distanceMm / 1000.0)}m  ±${s.distanceStdDevMm}mm",
+//                                        style = MaterialTheme.typography.bodySmall
+//                                    )
+//                                    Text(
+//                                        text = "RSSI ${s.rssi}dBm  성공 ${s.successCount}/${s.attemptCount}",
+//                                        style = MaterialTheme.typography.bodySmall,
+//                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+//                                    )
+//                                }
+//                            }
+//                        }
+//                    }
+//                }
+//            }
         }
 
         // 우측 중앙: 추적토글 / 1회스캔 / 자동스캔 (세로 정렬)
@@ -628,7 +716,7 @@ fun MapScreen(
         val fingerprintEntries = uiState.fingerprintEntries
         val anchorDirectionLabel = uiState.anchorDirectionLabel
         val matchCount = fingerprintEntries?.count { it.rssi != MISSING_RSSI } ?: 0
-        val hasBottom = (SeoulStationPocApplication.IS_TEST && uiState.isAutoPositioning) &&
+        val hasBottom = SeoulStationPocApplication.IS_TEST &&
                 (fingerprintEntries != null || errorMessage != null || finalLocation != null ||
                  anchorDirectionLabel != null ||
                  (isTestMarkerEnabled && (serverLocation != null || kalmanFilteredLocation != null ||
@@ -648,7 +736,7 @@ fun MapScreen(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    if (fingerprintEntries != null) {
+                    if (fingerprintEntries != null && isAutoScanning) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -660,7 +748,7 @@ fun MapScreen(
                     }
                     if (anchorDirectionLabel != null) {
                         val dirColor = if (anchorDirectionLabel == "정방향") Color(0xFF4CAF50) else Color(0xFFF44336)
-                        val dirText  = if (anchorDirectionLabel == "정방향") "▲ 정방향 (보폭 0.8m)" else "▼ 역방향 (보폭 0.4m)"
+                        val dirText  = if (anchorDirectionLabel == "정방향") "▲ 정방향 (보폭 ${uiState.stepLengthM}m)" else "▼ 역방향 (보폭 ${uiState.stepLengthM}m)"
                         Text(
                             text = dirText,
                             style = MaterialTheme.typography.bodySmall,
@@ -918,6 +1006,8 @@ private fun KakaoMapComposable(
                 override fun onMapReady(kakaoMap: KakaoMap) {
                     Log.d(TAG, "onMapReady: 지도 준비 완료")
                     kakaoMap.setGestureEnable(GestureType.Rotate, false)
+                    kakaoMap.cameraMinLevel = 17
+                    kakaoMap.cameraMaxLevel = 20
                     currentOnMapReady(kakaoMap)
                 }
             }

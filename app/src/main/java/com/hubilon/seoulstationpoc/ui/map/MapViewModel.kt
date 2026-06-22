@@ -63,6 +63,15 @@ private const val SCAN_INTERVAL_MS            = 1_000L
 private const val LOCATION_HISTORY_MIN_DIST_M = 1.0
 private const val LOCATION_HISTORY_MAX_SIZE   = 20
 
+private const val MBR_MIN_LAT = 37.5533828
+private const val MBR_MAX_LAT = 37.55571757
+private const val MBR_MIN_LNG = 126.96928985
+private const val MBR_MAX_LNG = 126.97222419
+//private const val MBR_MIN_LAT = 37.553826
+//private const val MBR_MAX_LAT = 37.554289
+//private const val MBR_MIN_LNG = 126.970123
+//private const val MBR_MAX_LNG = 126.971101
+
 enum class FloorSelection { HIDDEN, F2, F3 }
 
 sealed class ApLoadState {
@@ -101,7 +110,9 @@ data class MapUiState(
     val linkSnappedPoint: GeoPos? = null,
     val pdrResetIntervalSec: Int = PDR_RESET_INTERVAL_DEFAULT_S,  // PDR 갱신 주기 (초)
     val showPdrResetIntervalDialog: Boolean = false,
-    val anchorDirectionLabel: String? = null   // "정방향" | "역방향" | null
+    val anchorDirectionLabel: String? = null,  // "정방향" | "역방향" | null
+    val stepLengthM: Float = 0.6f,             // 현재 설정된 보폭 (m)
+    val isOutsideMbr: Boolean = false          // GPS가 MBR 구역 밖에 있음
 )
 
 class MapViewModel(application: Application) : AndroidViewModel(application) {
@@ -115,10 +126,10 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
     private val appLogger             = AppLogger(application.applicationContext)
     private val apiClient             = LocationApiClient(appLogger)
     private val scanLogger            = ScanLogger(application.applicationContext)
-    private val rttLocationFilter     = LocationKalmanFilter()
-    private val rttScanner            = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        RttScanner(application.applicationContext)
-    } else null
+//    private val rttLocationFilter     = LocationKalmanFilter()
+//    private val rttScanner            = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+//        RttScanner(application.applicationContext)
+//    } else null
 
     private val linkMatchProcessor = LinkMatchProcessor()
     private val kalmanProcessor    = KalmanProcessor()
@@ -127,10 +138,11 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
 
     private var autoScanJob: Job? = null
-    private var rttJob: Job? = null
+//    private var rttJob: Job? = null
     private var pdrOrigin: LocationResult? = null
     private var mapScanJob: Job? = null
     private var consecutiveForwardCount = 0
+    private var mbrChecked = false
 
     var linkData: List<LinkData> = emptyList()
         private set
@@ -243,7 +255,7 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
             appLogger.i(TAG, "칼만필터 ON")
         } else {
             kalmanProcessor.reset()
-            rttLocationFilter.reset()
+//            rttLocationFilter.reset()
             _uiState.update { it.copy(isKalmanEnabled = false) }
             Log.i(TAG, "칼만필터 OFF — 필터 초기화")
             appLogger.i(TAG, "칼만필터 OFF — 필터 초기화")
@@ -263,14 +275,14 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setKalmanMeasurementNoise(sigma: Double) {
         kalmanProcessor.filter.measurementNoiseSigma = sigma
-        rttLocationFilter.measurementNoiseSigma = sigma
+//        rttLocationFilter.measurementNoiseSigma = sigma
         _uiState.update { it.copy(kalmanMeasurementNoise = sigma, showKalmanMeasurementDialog = false) }
         Log.i(TAG, "칼만 측정노이즈 변경: $sigma")
     }
 
     fun setKalmanProcessNoise(sigma: Double) {
         kalmanProcessor.filter.processNoiseSigma = sigma
-        rttLocationFilter.processNoiseSigma = sigma
+//        rttLocationFilter.processNoiseSigma = sigma
         _uiState.update { it.copy(kalmanProcessNoise = sigma, showKalmanProcessDialog = false) }
         Log.i(TAG, "칼만 프로세스노이즈 변경: $sigma")
     }
@@ -299,35 +311,35 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                 var cycleCount = 0
 
                 try {
-                    // RTT 스캔 — 독립 주기 실행
-                    if (rttScanner != null && rttScanner.isSupported) {
-                        rttJob = launch {
-                            while (isActive) {
-                                val cycleStart = System.currentTimeMillis()
-                                try {
-                                    val signals = rttScanner.scan()
-                                    _uiState.update { it.copy(rttSignals = signals) }
-                                    if (signals.isNotEmpty()) {
-                                        try {
-                                            val raw = apiClient.rttPredict(signals)
-                                            val loc = if (_uiState.value.isKalmanEnabled)
-                                                rttLocationFilter.update(raw.lat, raw.lng) else raw
-                                            _uiState.update { it.copy(rttLocation = loc) }
-                                        } catch (e: CancellationException) { throw e
-                                        } catch (e: Exception) {
-                                            Log.w(TAG, "RTT predict 오류: ${e.message}")
-                                        }
-                                    }
-                                } catch (e: CancellationException) { throw e
-                                } catch (e: Exception) { Log.w(TAG, "RTT 스캔 오류: ${e.message}") }
-                                val remaining = SCAN_INTERVAL_MS - (System.currentTimeMillis() - cycleStart)
-                                if (remaining > 0) delay(remaining)
-                            }
-                        }
-                        Log.i(TAG, "RTT 스캔 시작")
-                    } else {
-                        Log.d(TAG, "RTT 미지원 — 스캔 생략")
-                    }
+                    // RTT 스캔 — 독립 주기 실행 (비활성화)
+//                    if (rttScanner != null && rttScanner.isSupported) {
+//                        rttJob = launch {
+//                            while (isActive) {
+//                                val cycleStart = System.currentTimeMillis()
+//                                try {
+//                                    val signals = rttScanner.scan()
+//                                    _uiState.update { it.copy(rttSignals = signals) }
+//                                    if (signals.isNotEmpty()) {
+//                                        try {
+//                                            val raw = apiClient.rttPredict(signals)
+//                                            val loc = if (_uiState.value.isKalmanEnabled)
+//                                                rttLocationFilter.update(raw.lat, raw.lng) else raw
+//                                            _uiState.update { it.copy(rttLocation = loc) }
+//                                        } catch (e: CancellationException) { throw e
+//                                        } catch (e: Exception) {
+//                                            Log.w(TAG, "RTT predict 오류: ${e.message}")
+//                                        }
+//                                    }
+//                                } catch (e: CancellationException) { throw e
+//                                } catch (e: Exception) { Log.w(TAG, "RTT 스캔 오류: ${e.message}") }
+//                                val remaining = SCAN_INTERVAL_MS - (System.currentTimeMillis() - cycleStart)
+//                                if (remaining > 0) delay(remaining)
+//                            }
+//                        }
+//                        Log.i(TAG, "RTT 스캔 시작")
+//                    } else {
+//                        Log.d(TAG, "RTT 미지원 — 스캔 생략")
+//                    }
 
                     // PDR 걸음 감지 → pdrLocation + finalLocation 갱신
                     launch {
@@ -378,11 +390,11 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                 } finally {
                     // WiFi 브로드캐스트 수신은 resultsFlow() Flow 취소로 자동 해제됨
                     kalmanProcessor.reset()
-                    rttLocationFilter.reset()
+//                    rttLocationFilter.reset()
                     pdrOrigin = null
                     consecutiveForwardCount = 0
-                    rttJob?.cancel()
-                    rttJob = null
+//                    rttJob?.cancel()
+//                    rttJob = null
                     Log.i(TAG, "[자동측위] 종료")
                     appLogger.i(TAG, "[자동측위] 종료")
                     _uiState.update {
@@ -406,6 +418,7 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
     /** 맵 화면 진입 시 호출 — GPS/BLE/Sensor 스캔 시작 및 PDR 초기화. */
     fun startMapScanning() {
         if (mapScanJob?.isActive == true) return
+        mbrChecked = false
         pdrProcessor.start()
         mapScanJob = viewModelScope.launch {
             withContext(Dispatchers.IO) { bleScanner.startScan() }
@@ -414,6 +427,16 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
             fusedLocationProvider.locationFlow
                 .filterNotNull()
                 .collect { loc ->
+                    if (!mbrChecked) {
+                        mbrChecked = true
+                        val outside = loc.lat < MBR_MIN_LAT || loc.lat > MBR_MAX_LAT ||
+                                      loc.lng < MBR_MIN_LNG || loc.lng > MBR_MAX_LNG
+                        if (outside) {
+                            Log.i(TAG, "[MBR] 첫 GPS 구역 이탈 — lat=${loc.lat}, lng=${loc.lng}")
+                            _uiState.update { state -> state.copy(fusedLocation = loc, isOutsideMbr = true) }
+                            return@collect
+                        }
+                    }
                     _uiState.update { state -> state.copy(fusedLocation = loc) }
                 }
         }
@@ -425,7 +448,7 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
         appLogger.i(TAG, "shutDown — 자동스캔 및 BLE 즉시 정리")
         mapScanJob?.cancel()
         autoScanJob?.cancel()
-        rttJob?.cancel()
+//        rttJob?.cancel()
         pdrProcessor.stop()
         bleScanner.stopScan()
         sensorCollector.stop()
@@ -521,28 +544,32 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                 val isForward = historyAngleRad == null || diffDeg <= 80.0
 
                 val directionLabel: String
+                val stepLen: Float
                 if (isForward) {
-                    consecutiveForwardCount++
-                    pdrProcessor.setStepLength(0.75f)
+                    stepLen = 0.75f
+                    pdrProcessor.setStepLength(stepLen)
                     directionLabel = "정방향"
                     Log.i(TAG, "[앵커] 정방향 — diff=${"%.1f".format(diffDeg)}° 연속 ${consecutiveForwardCount}회 보폭=0.75m")
-                    if (consecutiveForwardCount >= 3) {
-                        pdrOrigin = raw
-                        pdrProcessor.resetDisplacement()
-                        Log.i(TAG, "[앵커] PDR 기준점 갱신 — (${raw.lat}, ${raw.lng})")
-                    }
                 } else {
                     consecutiveForwardCount = 0
-                    pdrProcessor.setStepLength(0.45f)
+                    stepLen = 0.45f
+                    pdrProcessor.setStepLength(stepLen)
                     directionLabel = "역방향"
                     Log.i(TAG, "[앵커] 역방향 — diff=${"%.1f".format(diffDeg)}° 보폭=0.45m")
                 }
 
-                val toastMsg = if (directionLabel != null) "앵커 측위 — $directionLabel" else "앵커 측위 완료"
+                consecutiveForwardCount++
+                if (consecutiveForwardCount >= 2) {
+                    pdrOrigin = raw
+                    pdrProcessor.resetDisplacement()
+                    Log.i(TAG, "[앵커] PDR 기준점 갱신 — (${raw.lat}, ${raw.lng})")
+                }
+
+                val toastMsg = if (directionLabel != null) "앵커 측위 : $directionLabel, 카운트 : $consecutiveForwardCount" else "앵커 측위 완료, 카운트 : $consecutiveForwardCount"
                 if(SeoulStationPocApplication.IS_TEST)
                     Toast.makeText(getApplication(), toastMsg, Toast.LENGTH_SHORT).show()
 
-                _uiState.update { it.copy(anchorDirectionLabel = directionLabel) }
+                _uiState.update { it.copy(anchorDirectionLabel = directionLabel, stepLengthM = stepLen) }
             }
         } catch (e: CancellationException) {
             throw e

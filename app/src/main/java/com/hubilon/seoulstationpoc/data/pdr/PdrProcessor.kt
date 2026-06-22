@@ -127,8 +127,8 @@ class PdrProcessor(context: Context) {
      * 앵커 방향이 진행 방향과 일치하면 0.8f, 반대이면 0.4f로 조정한다.
      */
     fun setStepLength(meters: Float) {
-        stepLengthM = meters
-        Log.i(TAG, "PDR 보폭 조정 — ${meters}m")
+//        stepLengthM = meters
+//        Log.i(TAG, "PDR 보폭 조정 — ${meters}m")
     }
 
     /** 누적 변위와 걸음 수를 초기화하고 stepCount를 emit한다. 방위각은 초기화하지 않는다. */

@@ -10,7 +10,9 @@ import android.net.wifi.rtt.RangingResult
 import android.net.wifi.rtt.RangingResultCallback
 import android.net.wifi.rtt.WifiRttManager
 import android.util.Log
+import android.widget.Toast
 import androidx.annotation.RequiresApi
+import com.hubilon.seoulstationpoc.SeoulStationPocApplication
 import com.hubilon.seoulstationpoc.model.RttSignal
 import com.hubilon.seoulstationpoc.util.AppLog
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -90,6 +92,8 @@ class RttScanner(context: Context) {
             return emptyList()
         }
         Log.d(TAG, "RTT 대상 AP ${targets.size}개 발견")
+        if(SeoulStationPocApplication.IS_TEST)
+            Toast.makeText(appContext, "RTT 대상 AP ${targets.size}개 발견", Toast.LENGTH_SHORT).show()
 
         // Android 12+는 NEARBY_WIFI_DEVICES, 그 이하는 ACCESS_FINE_LOCATION 필요
         val requiredPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
