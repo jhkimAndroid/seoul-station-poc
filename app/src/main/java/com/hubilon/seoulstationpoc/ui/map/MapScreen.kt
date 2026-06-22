@@ -81,6 +81,9 @@ import com.kakao.vectormap.label.LabelOptions
 import com.kakao.vectormap.label.LabelStyle
 import com.kakao.vectormap.label.LabelStyles
 import com.kakao.vectormap.shape.MapPoints
+import com.kakao.vectormap.shape.Polygon
+import com.kakao.vectormap.shape.PolygonOptions
+import com.kakao.vectormap.shape.PolygonStyle
 import com.kakao.vectormap.shape.Polyline
 import com.kakao.vectormap.shape.PolylineOptions
 import com.kakao.vectormap.shape.PolylineStyle
@@ -310,6 +313,46 @@ fun MapScreen(
             linkPolylines.forEach { runCatching { shapeLayer?.remove(it) } }
             linkPolylines.clear()
             Log.i(TAG, "링크 폴리라인 제거")
+        }
+    }
+
+    // 서울역 구역 폴리곤 — 맵 준비 후 1회 추가, 반투명 녹색
+    var areaPolygon by remember { mutableStateOf<Polygon?>(null) }
+    DisposableEffect(kakaoMap) {
+        val map = kakaoMap
+        if (map != null) {
+            val coords = listOf(
+                LatLng.from(37.554289, 126.970212),
+                LatLng.from(37.554091, 126.970123),
+                LatLng.from(37.554028, 126.970544),
+                LatLng.from(37.553858, 126.970533),
+                LatLng.from(37.553853, 126.970606),
+                LatLng.from(37.553826, 126.970603),
+                LatLng.from(37.553826, 126.970755),
+                LatLng.from(37.554027, 126.970756),
+                LatLng.from(37.554088, 126.971101),
+                LatLng.from(37.554284, 126.971007),
+                LatLng.from(37.554218, 126.970654)
+            )
+            try {
+                val pts   = MapPoints.fromLatLng(coords)
+                val style = PolygonStyle.from(
+                    0x6600C853.toInt(),  // 40% alpha, 녹색 채우기
+                    2f,
+                    0xFF00C853.toInt()   // 불투명 녹색 외곽선
+                )
+                val opts = PolygonOptions.from(pts, style)
+                areaPolygon = map.getShapeManager()?.getLayer()?.addPolygon(opts)
+                Log.i(TAG, "구역 폴리곤 추가 완료 — ${coords.size}개 좌표")
+            } catch (e: Exception) {
+                Log.w(TAG, "구역 폴리곤 추가 실패: ${e.message}")
+            }
+        }
+        onDispose {
+            areaPolygon?.let { polygon ->
+                runCatching { kakaoMap?.getShapeManager()?.getLayer()?.remove(polygon) }
+                areaPolygon = null
+            }
         }
     }
 
@@ -574,7 +617,6 @@ fun MapScreen(
                 ) {
                     MarkerLegendItem(color = Color(0xFF388E3C), label = "GPS")
                     MarkerLegendItem(color = Color(0xFF2196F3), label = "서버")
-                    MarkerLegendItem(color = Color(0xFF673AB7), label = "칼만")
                     MarkerLegendItem(color = Color(0xFFF9A825), label = "PDR")
                     MarkerLegendItem(color = Color(0xFFE93228), label = "최종")
                 }
