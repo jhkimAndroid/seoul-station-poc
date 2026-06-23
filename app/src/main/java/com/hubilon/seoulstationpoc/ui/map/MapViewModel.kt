@@ -1,27 +1,26 @@
 package com.hubilon.seoulstationpoc.ui.map
 
 import android.app.Application
-import android.os.Build
+import android.hardware.GeomagneticField
 import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.application
 import androidx.lifecycle.viewModelScope
 import com.hubilon.seoulstationpoc.SeoulStationPocApplication
 import com.hubilon.seoulstationpoc.data.api.LocationApiClient
 import com.hubilon.seoulstationpoc.data.ble.BleScanner
-import com.hubilon.seoulstationpoc.data.filter.LocationKalmanFilter
-import com.hubilon.seoulstationpoc.data.geojson.LinkParser
-import com.hubilon.seoulstationpoc.data.lte.LteScanner
 import com.hubilon.seoulstationpoc.data.fingerprint.FingerprintBuilder
+import com.hubilon.seoulstationpoc.data.fingerprint.FingerprintEntry
+import com.hubilon.seoulstationpoc.data.fingerprint.MISSING_RSSI
+import com.hubilon.seoulstationpoc.data.geojson.LinkParser
 import com.hubilon.seoulstationpoc.data.location.FusedLocationProvider
 import com.hubilon.seoulstationpoc.data.location.processor.KalmanProcessor
 import com.hubilon.seoulstationpoc.data.location.processor.LinkMatchProcessor
 import com.hubilon.seoulstationpoc.data.location.processor.LocationSourceType
 import com.hubilon.seoulstationpoc.data.location.processor.ProcessContext
+import com.hubilon.seoulstationpoc.data.lte.LteScanner
 import com.hubilon.seoulstationpoc.data.pdr.PdrProcessor
-import com.hubilon.seoulstationpoc.data.fingerprint.FingerprintEntry
-import com.hubilon.seoulstationpoc.data.fingerprint.MISSING_RSSI
-import com.hubilon.seoulstationpoc.data.rtt.RttScanner
 import com.hubilon.seoulstationpoc.data.sensor.SensorCollector
 import com.hubilon.seoulstationpoc.data.wifi.WifiScanner
 import com.hubilon.seoulstationpoc.model.BleSignal
@@ -34,17 +33,9 @@ import com.hubilon.seoulstationpoc.model.WifiSignal
 import com.hubilon.seoulstationpoc.util.AppLog
 import com.hubilon.seoulstationpoc.util.AppLogger
 import com.hubilon.seoulstationpoc.util.ScanLogger
-import kotlin.math.PI
-import kotlin.math.asin
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.pow
-import kotlin.math.sin
-import kotlin.math.sqrt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -56,6 +47,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.PI
+import kotlin.math.asin
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 private const val TAG = AppLog.VM
 private const val PDR_RESET_INTERVAL_DEFAULT_S  = 10        // PDR 주기 리셋 기본값(초)
@@ -140,6 +138,7 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
     private var autoScanJob: Job? = null
 //    private var rttJob: Job? = null
     private var pdrOrigin: LocationResult? = null
+    private var latestAnchorResult: LocationResult? = null
     private var mapScanJob: Job? = null
     private var consecutiveForwardCount = 0
     private var mbrChecked = false
@@ -346,6 +345,45 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                         pdrProcessor.stepCount.collect {
                             val state = _uiState.value
                             if (!state.isPdrEnabled) return@collect
+
+                            // 앵커 카운트 조건 충족 시 PDR 기준점 갱신 (걸음 시점에 적용)
+                            val anchor = latestAnchorResult
+                            val curPdrLoc = state.pdrLocation
+                            val pdrAnchorDist = if (curPdrLoc != null && anchor != null)
+                                geoDistanceM(curPdrLoc.lat, curPdrLoc.lng, anchor.lat, anchor.lng)
+                            else Double.MAX_VALUE
+
+                            if(anchor != null && curPdrLoc != null) {
+                                val isForward = checkFront(state, curPdrLoc, anchor)
+//                                pdrProcessor.setStepLength(if(isForward) 6.5F else 4.5F)
+                                if(pdrAnchorDist >= 5.0) {
+                                    consecutiveForwardCount++
+                                    if (consecutiveForwardCount >= 3) {
+                                        consecutiveForwardCount = 0
+                                        val bearing = geoBearingRad(
+                                            curPdrLoc.lat, curPdrLoc.lng,
+                                            anchor.lat, anchor.lng
+                                        )
+
+                                        if(SeoulStationPocApplication.IS_TEST)
+                                            Toast.makeText(application.applicationContext, "위치 보정(${if(isForward) "정방향 3m" else "역방향 2m"})", Toast.LENGTH_SHORT).show()
+
+                                        val newOrigin = if (isForward) {
+                                            // 정방향: 측위좌표 직접 적용
+                                            geoMoveToward(curPdrLoc.lat, curPdrLoc.lng, bearing, 3.0)
+                                        } else {
+                                            // 역방향: PDR 위치에서 측위좌표 방향으로 5m 이동
+                                            geoMoveToward(curPdrLoc.lat, curPdrLoc.lng, bearing, 2.0)
+                                        }
+                                        pdrOrigin = newOrigin
+                                        pdrProcessor.resetDisplacement()
+                                        Log.i(TAG, "[PDR 걸음] PDR 기준점 갱신 — ${if (isForward) "정방향" else "역방향"} dist=${"%.1f".format(pdrAnchorDist)}m → (${newOrigin.lat}, ${newOrigin.lng})")
+                                    }
+                                }
+                                else
+                                    consecutiveForwardCount = 0
+                            }
+
                             val origin = pdrOrigin ?: return@collect
                             val newPdrLoc = pdrProcessor.applyPdr(origin.lat, origin.lng)
                             val pdrGeo = GeoPos(newPdrLoc.lat, newPdrLoc.lng)
@@ -392,7 +430,7 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                     kalmanProcessor.reset()
 //                    rttLocationFilter.reset()
                     pdrOrigin = null
-                    consecutiveForwardCount = 0
+                    latestAnchorResult = null
 //                    rttJob?.cancel()
 //                    rttJob = null
                     Log.i(TAG, "[자동측위] 종료")
@@ -413,6 +451,32 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    private fun checkFront(state: MapUiState, curPdrLoc: LocationResult, anchor: LocationResult): Boolean {
+        // 1. 히스토리 마지막 N개 좌표의 평균 진행 방향 (circular mean)
+        val histPoints = state.locationHistory.takeLast(4)
+        val historyAngleRad: Double? = if (histPoints.size >= 2) {
+            val bearings = (0 until histPoints.size - 1).map { i ->
+                geoBearingRad(
+                    histPoints[i].lat, histPoints[i].lng,
+                    histPoints[i+1].lat, histPoints[i+1].lng
+                )
+            }
+            val meanSin = bearings.sumOf { sin(it) } / bearings.size
+            val meanCos = bearings.sumOf { cos(it) } / bearings.size
+            atan2(meanSin, meanCos)
+        } else null
+
+        // 2. 현재 PDR 좌표 → 앵커 측위 좌표 방향
+        val anchorAngleRad = geoBearingRad(
+            curPdrLoc.lat, curPdrLoc.lng,
+            anchor.lat, anchor.lng
+        )
+
+        // 3. 두 방향의 차이로 정방향/역방향 판단
+        val diffDeg = if (historyAngleRad != null) angleDiffDeg(historyAngleRad, anchorAngleRad) else 0.0
+        return historyAngleRad == null || diffDeg <= 90.0
     }
 
     /** 맵 화면 진입 시 호출 — GPS/BLE/Sensor 스캔 시작 및 PDR 초기화. */
@@ -436,6 +500,12 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                             _uiState.update { state -> state.copy(fusedLocation = loc, isOutsideMbr = true) }
                             return@collect
                         }
+                        // 첫 유효 GPS에서 자북→진북 편각 계산 후 PDR에 적용
+                        val geo = GeomagneticField(
+                            loc.lat.toFloat(), loc.lng.toFloat(), 0f,
+                            System.currentTimeMillis()
+                        )
+                        pdrProcessor.setDeclination(geo.declination)
                     }
                     _uiState.update { state -> state.copy(fusedLocation = loc) }
                 }
@@ -524,52 +594,43 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                 Log.i(TAG, "[앵커] 첫 스냅 — pdrOrigin=(${raw.lat}, ${raw.lng})")
             } else {
                 // ── 2번째 이후 앵커: 방향 판단 → 보폭 조정 → (정방향 3회↑) PDR 기준점 갱신 ──
-                val curPdrGeo = _uiState.value.pdrLocation?.let { GeoPos(it.lat, it.lng) } ?: prevFinalGeo
+//                val curPdrGeo = _uiState.value.pdrLocation?.let { GeoPos(it.lat, it.lng) } ?: prevFinalGeo
 
                 // historyAngle: 마지막 4개 좌표의 평균 진행 방향 (circular mean)
-                val histPoints = _uiState.value.locationHistory.takeLast(4)
-                val historyAngleRad: Double? = if (histPoints.size >= 2) {
-                    val bearings = (0 until histPoints.size - 1).map { i ->
-                        geoBearingRad(histPoints[i].lat, histPoints[i].lng, histPoints[i+1].lat, histPoints[i+1].lng)
-                    }
-                    val meanSin = bearings.sumOf { sin(it) } / bearings.size
-                    val meanCos = bearings.sumOf { cos(it) } / bearings.size
-                    atan2(meanSin, meanCos)
-                } else null
+//                val histPoints = _uiState.value.locationHistory.takeLast(4)
+//                val historyAngleRad: Double? = if (histPoints.size >= 2) {
+//                    val bearings = (0 until histPoints.size - 1).map { i ->
+//                        geoBearingRad(histPoints[i].lat, histPoints[i].lng, histPoints[i+1].lat, histPoints[i+1].lng)
+//                    }
+//                    val meanSin = bearings.sumOf { sin(it) } / bearings.size
+//                    val meanCos = bearings.sumOf { cos(it) } / bearings.size
+//                    atan2(meanSin, meanCos)
+//                } else null
 
                 // anchorAngle: 현재 PDR 좌표 → anchor 측위 좌표 방향
-                val anchorAngleRad = geoBearingRad(curPdrGeo.lat, curPdrGeo.lng, anchorGeo.lat, anchorGeo.lng)
+//                val anchorAngleRad = geoBearingRad(curPdrGeo.lat, curPdrGeo.lng, anchorGeo.lat, anchorGeo.lng)
+//                val diffDeg = if (historyAngleRad != null) angleDiffDeg(historyAngleRad, anchorAngleRad) else 0.0
+//                val isForward = historyAngleRad == null || diffDeg <= 80.0
+//                val directionLabel: String
+//                val stepLen: Float
+//                if (isForward) {
+//                    stepLen = 0.75f
+//                    pdrProcessor.setStepLength(stepLen)
+//                    directionLabel = "정방향"
+//                    Log.i(TAG, "[앵커] 정방향 — diff=${"%.1f".format(diffDeg)}° 연속 ${consecutiveForwardCount}회 보폭=0.75m")
+//                } else {
+//                    stepLen = 0.45f
+//                    pdrProcessor.setStepLength(stepLen)
+//                    directionLabel = "역방향"
+//                    Log.i(TAG, "[앵커] 역방향 — diff=${"%.1f".format(diffDeg)}° 보폭=0.45m")
+//                }
 
-                val diffDeg = if (historyAngleRad != null) angleDiffDeg(historyAngleRad, anchorAngleRad) else 0.0
-                val isForward = historyAngleRad == null || diffDeg <= 80.0
-
-                val directionLabel: String
-                val stepLen: Float
-                if (isForward) {
-                    stepLen = 0.75f
-                    pdrProcessor.setStepLength(stepLen)
-                    directionLabel = "정방향"
-                    Log.i(TAG, "[앵커] 정방향 — diff=${"%.1f".format(diffDeg)}° 연속 ${consecutiveForwardCount}회 보폭=0.75m")
-                } else {
-                    consecutiveForwardCount = 0
-                    stepLen = 0.45f
-                    pdrProcessor.setStepLength(stepLen)
-                    directionLabel = "역방향"
-                    Log.i(TAG, "[앵커] 역방향 — diff=${"%.1f".format(diffDeg)}° 보폭=0.45m")
-                }
-
-                consecutiveForwardCount++
-                if (consecutiveForwardCount >= 2) {
-                    pdrOrigin = raw
-                    pdrProcessor.resetDisplacement()
-                    Log.i(TAG, "[앵커] PDR 기준점 갱신 — (${raw.lat}, ${raw.lng})")
-                }
-
-                val toastMsg = if (directionLabel != null) "앵커 측위 : $directionLabel, 카운트 : $consecutiveForwardCount" else "앵커 측위 완료, 카운트 : $consecutiveForwardCount"
-                if(SeoulStationPocApplication.IS_TEST)
-                    Toast.makeText(getApplication(), toastMsg, Toast.LENGTH_SHORT).show()
-
-                _uiState.update { it.copy(anchorDirectionLabel = directionLabel, stepLengthM = stepLen) }
+                latestAnchorResult = raw
+//                Log.i(TAG, "[앵커] 카운트=${consecutiveForwardCount} — 다음 PDR 걸음 시 기준점 갱신 예정")
+//                _uiState.update { it.copy(anchorDirectionLabel = directionLabel, stepLengthM = stepLen) }
+//                val toastMsg = if (directionLabel != null) "앵커 측위 : $directionLabel, 카운트 : $consecutiveForwardCount" else "앵커 측위 완료, 카운트 : $consecutiveForwardCount"
+//                if(SeoulStationPocApplication.IS_TEST)
+//                    Toast.makeText(getApplication(), toastMsg, Toast.LENGTH_SHORT).show()
             }
         } catch (e: CancellationException) {
             throw e
@@ -602,6 +663,17 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
         val φ2   = lat2 * PI / 180.0
         val dLng = (lng2 - lng1) * PI / 180.0
         return atan2(sin(dLng) * cos(φ2), cos(φ1) * sin(φ2) - sin(φ1) * cos(φ2) * cos(dLng))
+    }
+
+    /** 시작 좌표에서 방위각(라디안) 방향으로 distM 미터 이동한 좌표를 반환한다. */
+    private fun geoMoveToward(lat: Double, lng: Double, bearingRad: Double, distM: Double): LocationResult {
+        val R  = 6371000.0
+        val δ  = distM / R
+        val φ1 = lat * PI / 180.0
+        val λ1 = lng * PI / 180.0
+        val φ2 = asin(sin(φ1) * cos(δ) + cos(φ1) * sin(δ) * cos(bearingRad))
+        val λ2 = λ1 + atan2(sin(bearingRad) * sin(δ) * cos(φ1), cos(δ) - sin(φ1) * sin(φ2))
+        return LocationResult(φ2 * 180.0 / PI, λ2 * 180.0 / PI)
     }
 
     /** 두 방위각(라디안) 간 최소 각도 차이(도, 0~180). */

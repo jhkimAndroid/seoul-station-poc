@@ -24,7 +24,7 @@ private const val TAG = AppLog.SENSOR
 private const val STEP_HIGH_THRESHOLD  = 11.5f
 private const val STEP_LOW_THRESHOLD   = 9.5f
 private const val MIN_STEP_INTERVAL_MS = 300L
-private const val STEP_LENGTH_DEFAULT_M = 0.6f
+private const val STEP_LENGTH_DEFAULT_M = 0.7f
 
 /**
  * PDR 변위 트래커.
@@ -46,8 +46,11 @@ class PdrProcessor(context: Context) {
     @Volatile private var displacementNorth = 0.0
     @Volatile private var displacementEast  = 0.0
 
-    // 방위각 (라디안, 0=북, 시계 방향 양수)
+    // 방위각 (라디안, 0=북, 시계 방향 양수) — 자북(Magnetic North) 기준
     @Volatile private var azimuthRad = 0f
+
+    // 자북→진북 편각 보정값 (라디안, GPS 첫 수신 시 GeomagneticField로 설정)
+    @Volatile private var declinationRad = 0f
 
     // 보폭 (미터, 앵커 방향 비교로 동적 조정)
     @Volatile private var stepLengthM = STEP_LENGTH_DEFAULT_M
@@ -93,7 +96,7 @@ class PdrProcessor(context: Context) {
     }
 
     private fun onStepDetected() {
-        val heading = azimuthRad.toDouble()
+        val heading = (azimuthRad + declinationRad).toDouble()
         displacementNorth += stepLengthM * cos(heading)
         displacementEast  += stepLengthM * sin(heading)
         totalSteps++
@@ -114,6 +117,16 @@ class PdrProcessor(context: Context) {
     }
 
     /**
+     * 자북→진북 편각을 설정한다.
+     * GPS 첫 수신 시 GeomagneticField.getDeclination()으로 계산한 값을 전달한다.
+     * 서편각이면 음수(한국 약 -7~-8°), 동편각이면 양수.
+     */
+    fun setDeclination(degrees: Float) {
+        declinationRad = (degrees * PI / 180.0).toFloat()
+        Log.i(TAG, "PDR 편각 보정 설정 — ${degrees}° (${declinationRad}rad)")
+    }
+
+    /**
      * 방위각을 외부에서 직접 설정한다.
      * 앵커 이동 방향으로 초기 방향을 보정할 때 사용하며, reset() 이후에도 값이 유지된다.
      */
@@ -127,8 +140,8 @@ class PdrProcessor(context: Context) {
      * 앵커 방향이 진행 방향과 일치하면 0.8f, 반대이면 0.4f로 조정한다.
      */
     fun setStepLength(meters: Float) {
-//        stepLengthM = meters
-//        Log.i(TAG, "PDR 보폭 조정 — ${meters}m")
+        stepLengthM = meters
+        Log.i(TAG, "PDR 보폭 조정 — ${meters}m")
     }
 
     /** 누적 변위와 걸음 수를 초기화하고 stepCount를 emit한다. 방위각은 초기화하지 않는다. */

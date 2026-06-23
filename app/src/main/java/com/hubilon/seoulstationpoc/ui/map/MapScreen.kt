@@ -223,7 +223,7 @@ fun MapScreen(
         )
     }
 
-    if (uiState.isOutsideMbr) {
+    if (uiState.isOutsideMbr && !SeoulStationPocApplication.IS_TEST) {
         AlertDialog(
             onDismissRequest = {},
             title = { Text("구역 이탈") },
