@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "SeoulStation Poc"
 include(":app")
+include(":positioning-lib")

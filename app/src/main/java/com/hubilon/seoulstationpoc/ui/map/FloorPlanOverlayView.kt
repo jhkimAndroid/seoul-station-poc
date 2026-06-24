@@ -9,7 +9,7 @@ import android.util.Log
 import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
-import com.hubilon.seoulstationpoc.model.GeoPos
+import com.hubilon.positioning.model.GeoPos
 import com.hubilon.seoulstationpoc.util.AppLog
 import com.kakao.vectormap.KakaoMap
 import com.kakao.vectormap.LatLng

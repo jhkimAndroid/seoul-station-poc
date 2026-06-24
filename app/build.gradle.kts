@@ -24,7 +24,6 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "KAKAO_MAP_KEY", "\"${localProps.getProperty("kakao.native.appkey", "")}\"")
     }
@@ -63,6 +62,7 @@ androidComponents {
 }
 
 dependencies {
+    implementation(project(":positioning-lib"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)

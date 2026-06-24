@@ -20,3 +20,4 @@ local.properties
 /artifacts/
 /CLAUDE.md
 /app/build/
+/positioning-lib/build/

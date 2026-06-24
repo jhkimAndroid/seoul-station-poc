@@ -34,12 +34,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.hubilon.seoulstationpoc.data.fingerprint.FingerprintEntry
-import com.hubilon.seoulstationpoc.data.fingerprint.MISSING_RSSI
-import com.hubilon.seoulstationpoc.model.BleSignal
-import com.hubilon.seoulstationpoc.model.LteSignal
-import com.hubilon.seoulstationpoc.model.RttSignal
-import com.hubilon.seoulstationpoc.model.WifiSignal
+import com.hubilon.positioning.model.BleSignal
+import com.hubilon.positioning.model.FingerprintEntry
+import com.hubilon.positioning.model.LteSignal
+import com.hubilon.positioning.model.MISSING_RSSI
+import com.hubilon.positioning.model.RttSignal
+import com.hubilon.positioning.model.WifiSignal
 import com.hubilon.seoulstationpoc.ui.map.MapViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)

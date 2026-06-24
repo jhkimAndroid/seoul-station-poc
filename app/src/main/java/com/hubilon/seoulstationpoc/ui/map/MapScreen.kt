@@ -67,7 +67,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hubilon.seoulstationpoc.R
 import com.hubilon.seoulstationpoc.SeoulStationPocApplication
-import com.hubilon.seoulstationpoc.data.fingerprint.MISSING_RSSI
+import com.hubilon.positioning.model.MISSING_RSSI
 import com.hubilon.seoulstationpoc.util.AppLog
 import com.kakao.vectormap.GestureType
 import com.kakao.vectormap.KakaoMap
