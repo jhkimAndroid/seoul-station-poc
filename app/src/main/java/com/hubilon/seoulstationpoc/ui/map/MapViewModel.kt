@@ -49,12 +49,6 @@ data class MapUiState(
     val rttLocation: LocationResult? = null,
     val locationUpdateCount: Int = 0,
     val locationHistory: List<GeoPos> = emptyList(),
-    val isPdrEnabled: Boolean = true,
-    val isKalmanEnabled: Boolean = true,
-    val kalmanMeasurementNoise: Double = 10.0,
-    val kalmanProcessNoise: Double = 0.7,
-    val showKalmanMeasurementDialog: Boolean = false,
-    val showKalmanProcessDialog: Boolean = false,
     val rttSignals: List<RttSignal> = emptyList(),
     val errorMessage: String? = null,
     val selectedFloor: FloorSelection = FloorSelection.F3,
@@ -221,49 +215,13 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(isTracking = newValue) }
     }
 
-    fun togglePdr() {
-        val enabling = !_uiState.value.isPdrEnabled
-        if (enabling) {
-            positioning.resetPdr()
-            _uiState.update { it.copy(isPdrEnabled = true) }
-            Log.i(TAG, "PDR ON")
-        } else {
-            _uiState.update { it.copy(isPdrEnabled = false, pdrLocation = null) }
-            Log.i(TAG, "PDR OFF")
-        }
-    }
-
-    fun toggleKalman() {
-        val enabling = !_uiState.value.isKalmanEnabled
-        _uiState.update { it.copy(isKalmanEnabled = enabling) }
-        Log.i(TAG, "칼만필터 ${if (enabling) "ON" else "OFF"}")
-    }
-
-    fun showKalmanMeasurementDialog()    { _uiState.update { it.copy(showKalmanMeasurementDialog = true) } }
-    fun showKalmanProcessDialog()        { _uiState.update { it.copy(showKalmanProcessDialog = true) } }
-    fun dismissKalmanDialogs()           { _uiState.update { it.copy(showKalmanMeasurementDialog = false, showKalmanProcessDialog = false) } }
     fun showPdrResetIntervalDialog()     { _uiState.update { it.copy(showPdrResetIntervalDialog = true) } }
     fun dismissPdrResetIntervalDialog()  { _uiState.update { it.copy(showPdrResetIntervalDialog = false) } }
-
-    fun setKalmanMeasurementNoise(sigma: Double) {
-        _uiState.update { it.copy(kalmanMeasurementNoise = sigma, showKalmanMeasurementDialog = false) }
-        Log.i(TAG, "칼만 측정노이즈 변경: $sigma")
-    }
-
-    fun setKalmanProcessNoise(sigma: Double) {
-        _uiState.update { it.copy(kalmanProcessNoise = sigma, showKalmanProcessDialog = false) }
-        Log.i(TAG, "칼만 프로세스노이즈 변경: $sigma")
-    }
 
     fun setPdrResetIntervalSec(sec: Int) {
         val clamped = sec.coerceIn(5, 20)
         _uiState.update { it.copy(pdrResetIntervalSec = clamped, showPdrResetIntervalDialog = false) }
         Log.i(TAG, "PDR 갱신 주기 변경: ${clamped}s")
-    }
-
-    fun resetPdr() {
-        positioning.resetPdr()
-        Log.i(TAG, "PDR 초기화 요청")
     }
 
     override fun onCleared() {

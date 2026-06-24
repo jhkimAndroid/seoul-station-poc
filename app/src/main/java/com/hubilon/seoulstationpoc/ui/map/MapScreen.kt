@@ -65,9 +65,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hubilon.positioning.model.MISSING_RSSI
 import com.hubilon.seoulstationpoc.R
 import com.hubilon.seoulstationpoc.SeoulStationPocApplication
-import com.hubilon.positioning.model.MISSING_RSSI
 import com.hubilon.seoulstationpoc.util.AppLog
 import com.kakao.vectormap.GestureType
 import com.kakao.vectormap.KakaoMap
@@ -449,7 +449,6 @@ fun MapScreen(
         // 층 평면도 오버레이 + 위치 마커 (마커는 평면도 위에 그림)
         val isAutoScanning      = uiState.isAutoPositioning
         val isTestMarkerEnabled = uiState.isTestMarkerEnabled
-        val isPdrEnabled        = uiState.isPdrEnabled
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { FloorPlanOverlayView(it) },
@@ -464,7 +463,7 @@ fun MapScreen(
                     if (isAutoScanning && isTestMarkerEnabled) kalmanFilteredLocation?.let { LatLng.from(it.lat, it.lng) } else null
                 )
                 view.updatePdrLocation(
-                    if (isAutoScanning && isTestMarkerEnabled && isPdrEnabled) pdrLocation?.let { LatLng.from(it.lat, it.lng) } else null
+                    if (isAutoScanning && isTestMarkerEnabled) pdrLocation?.let { LatLng.from(it.lat, it.lng) } else null
                 )
                 view.updateFusedLocation(
                     if (isTestMarkerEnabled) fusedLocation?.let { LatLng.from(it.lat, it.lng) } else null
@@ -622,16 +621,6 @@ fun MapScreen(
         ) {
             if(SeoulStationPocApplication.IS_TEST) {
                 KalmanParamButton(
-                    label = "M",
-                    value = "%.0f".format(uiState.kalmanMeasurementNoise),
-                    onClick = { viewModel.showKalmanMeasurementDialog() }
-                )
-                KalmanParamButton(
-                    label = "P",
-                    value = "%.1f".format(uiState.kalmanProcessNoise),
-                    onClick = { viewModel.showKalmanProcessDialog() }
-                )
-                KalmanParamButton(
                     label = "R",
                     value = "${uiState.pdrResetIntervalSec}s",
                     onClick = { viewModel.showPdrResetIntervalDialog() }
@@ -640,36 +629,6 @@ fun MapScreen(
             FloorSelectionDropdown(
                 selectedFloor = uiState.selectedFloor,
                 onFloorSelected = { viewModel.setFloor(it) }
-            )
-        }
-
-        // 칼만 측정노이즈 설정 다이얼로그
-        if (uiState.showKalmanMeasurementDialog) {
-            KalmanParamDialog(
-                title = "측정 노이즈 (M)",
-                description = "measurementNoiseSigma",
-                hint = "▲ 올리면: 측위를 덜 신뢰 → 스무딩 강화\n▼ 내리면: 측위를 더 신뢰 → 즉각 반응",
-                currentValue = uiState.kalmanMeasurementNoise.toFloat(),
-                valueRange = 1f..20f,
-                steps = 18,
-                formatValue = { "%.0f".format(it) },
-                onConfirm = { viewModel.setKalmanMeasurementNoise(it.toDouble()) },
-                onDismiss = { viewModel.dismissKalmanDialogs() }
-            )
-        }
-
-        // 칼만 프로세스노이즈 설정 다이얼로그
-        if (uiState.showKalmanProcessDialog) {
-            KalmanParamDialog(
-                title = "프로세스 노이즈 (P)",
-                description = "processNoiseSigma",
-                hint = "▲ 올리면: 빠른 움직임 가정 → 즉각 반응\n▼ 내리면: 느린 움직임 가정 → 스무딩 강화",
-                currentValue = (uiState.kalmanProcessNoise * 10).toFloat(),
-                valueRange = 1f..20f,
-                steps = 18,
-                formatValue = { "%.1f".format(it / 10f) },
-                onConfirm = { viewModel.setKalmanProcessNoise((it / 10.0)) },
-                onDismiss = { viewModel.dismissKalmanDialogs() }
             )
         }
 
