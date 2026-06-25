@@ -19,7 +19,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.seoulstationpoc"
+        applicationId = "com.hubilon.seoulstationpoc"
         minSdk = 28
         targetSdk = 36
         versionCode = 1
@@ -29,8 +29,14 @@ android {
     }
 
     buildTypes {
-        release {
+        debug {
             isMinifyEnabled = false
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

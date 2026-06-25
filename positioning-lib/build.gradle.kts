@@ -10,6 +10,16 @@ android {
         minSdk = 28
     }
 
+    buildTypes {
+        debug {
+            isMinifyEnabled = false
+        }
+        release {
+            isMinifyEnabled = false
+            consumerProguardFiles("consumer-rules.pro")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
